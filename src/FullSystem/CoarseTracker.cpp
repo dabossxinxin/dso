@@ -28,9 +28,8 @@
  *  Created on: Jan 7, 2014
  *      Author: engelj
  */
-
-#include "FullSystem/CoarseTracker.h"
 #include "FullSystem/FullSystem.h"
+#include "FullSystem/CoarseTracker.h"
 #include "FullSystem/HessianBlocks.h"
 #include "FullSystem/Residuals.h"
 #include "OptimizationBackend/EnergyFunctionalStructs.h"
@@ -43,8 +42,6 @@
 
 namespace dso
 {
-
-
 	template<int b, typename T>
 	T* allocAligned(int size, std::vector<T*> &rawPtrVec)
 	{
@@ -54,7 +51,6 @@ namespace dso
 		T* alignedPtr = (T*)((((uintptr_t)(ptr + padT)) >> b) << b);
 		return alignedPtr;
 	}
-
 
 	CoarseTracker::CoarseTracker(int ww, int hh) : lastRef_aff_g2l(0, 0)
 	{
@@ -130,8 +126,6 @@ namespace dso
 		}
 	}
 
-
-
 	void CoarseTracker::makeCoarseDepthL0(std::vector<FrameHessian*> frameHessians)
 	{
 		// make coarse tracking templates for latstRef.
@@ -156,7 +150,6 @@ namespace dso
 				}
 			}
 		}
-
 
 		for (int lvl = 1; lvl < pyrLevelsUsed; lvl++)
 		{
@@ -291,8 +284,6 @@ namespace dso
 
 	}
 
-
-
 	void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l)
 	{
 		acc.initialize();
@@ -351,9 +342,6 @@ namespace dso
 		b_out.segment<1>(6) *= SCALE_A;
 		b_out.segment<1>(7) *= SCALE_B;
 	}
-
-
-
 
 	Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH)
 	{
@@ -614,9 +602,6 @@ namespace dso
 					inc[7] = incStitch[6];
 				}
 
-
-
-
 				float extrapFac = 1;
 				if (lambda < lambdaExtrapolationLimit) extrapFac = sqrt(sqrt(lambdaExtrapolationLimit / lambda));
 				inc *= extrapFac;
@@ -702,15 +687,11 @@ namespace dso
 			|| (setting_affineOptModeB == 0 && (fabsf((float)relAff[1]) > 200)))
 			return false;
 
-
-
 		if (setting_affineOptModeA < 0) aff_g2l_out.a = 0;
 		if (setting_affineOptModeB < 0) aff_g2l_out.b = 0;
 
 		return true;
 	}
-
-
 
 	void CoarseTracker::debugPlotIDepthMap(float* minID_pt, float* maxID_pt, std::vector<IOWrap::Output3DWrapper*> &wraps)
 	{
@@ -810,8 +791,6 @@ namespace dso
 		}
 	}
 
-
-
 	void CoarseTracker::debugPlotIDepthMapFloat(std::vector<IOWrap::Output3DWrapper*> &wraps)
 	{
 		if (w[1] == 0) return;
@@ -820,16 +799,6 @@ namespace dso
 		for (IOWrap::Output3DWrapper* ow : wraps)
 			ow->pushDepthImageFloat(&mim, lastRef);
 	}
-
-
-
-
-
-
-
-
-
-
 
 	CoarseDistanceMap::CoarseDistanceMap(int ww, int hh)
 	{

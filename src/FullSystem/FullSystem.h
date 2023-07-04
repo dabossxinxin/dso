@@ -25,19 +25,21 @@
 #define MAX_ACTIVE_FRAMES 100
 
 #include <deque>
-#include "util/NumType.h"
-#include "util/globalCalib.h"
-#include "vector"
- 
+#include <vector>
 #include <iostream>
 #include <fstream>
+
+#include "util/NumType.h"
+#include "util/globalCalib.h"
 #include "util/NumType.h"
 #include "FullSystem/Residuals.h"
 #include "FullSystem/HessianBlocks.h"
+#include "FullSystem/PixelSelector2.h"
+#include "FullSystem/CoarseTracker.h"
+#include "FullSystem/CoarseInitializer.h"
 #include "util/FrameShell.h"
 #include "util/IndexThreadReduce.h"
 #include "OptimizationBackend/EnergyFunctional.h"
-#include "FullSystem/PixelSelector2.h"
 
 #include <math.h>
 
@@ -51,22 +53,24 @@ namespace dso
 	class PixelSelector;
 	class PCSyntheticPoint;
 	class CoarseTracker;
-	struct FrameHessian;
-	struct PointHessian;
 	class CoarseInitializer;
-	struct ImmaturePointTemporaryResidual;
 	class ImageAndExposure;
 	class CoarseDistanceMap;
-
 	class EnergyFunctional;
+	struct FrameHessian;
+	struct PointHessian;
+	struct ImmaturePointTemporaryResidual;
 
-	template<typename T> inline void deleteOut(std::vector<T*> &v, const int i)
+	template<typename T> 
+	inline void deleteOut(std::vector<T*> &v, const int i)
 	{
 		delete v[i];
 		v[i] = v.back();
 		v.pop_back();
 	}
-	template<typename T> inline void deleteOutPt(std::vector<T*> &v, const T* i)
+
+	template<typename T> 
+	inline void deleteOutPt(std::vector<T*> &v, const T* i)
 	{
 		delete i;
 
@@ -77,14 +81,18 @@ namespace dso
 				v.pop_back();
 			}
 	}
-	template<typename T> inline void deleteOutOrder(std::vector<T*> &v, const int i)
+
+	template<typename T> 
+	inline void deleteOutOrder(std::vector<T*> &v, const int i)
 	{
 		delete v[i];
 		for (unsigned int k = i + 1; k < v.size(); k++)
 			v[k - 1] = v[k];
 		v.pop_back();
 	}
-	template<typename T> inline void deleteOutOrder(std::vector<T*> &v, const T* element)
+
+	template<typename T> 
+	inline void deleteOutOrder(std::vector<T*> &v, const T* element)
 	{
 		int i = -1;
 		for (unsigned int k = 0; k < v.size(); k++)

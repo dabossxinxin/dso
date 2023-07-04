@@ -24,7 +24,6 @@
 #include "util/NumType.h"
 #include "IOWrapper/ImageDisplay.h"
 #include "util/globalCalib.h"
-#include "FullSystem/HessianBlocks.h"
 #include "util/globalFuncs.h"
 
 namespace dso

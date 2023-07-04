@@ -53,10 +53,12 @@ set(dso_SOURCE_FILES
 
 include_directories(
   ${PROJECT_SOURCE_DIR}/src
+  ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/thirdparty/Sophus
-  ${PROJECT_SOURCE_DIR}/thirdparty/sse2neon
   ${EIGEN3_INCLUDE_DIR}
   ${Boost_INCLUDE_DIR}
+  ${CHOLMOD_INCLUDE_DIR}
+  ${CSPARSE_INCLUDE_DIR}
 )
 
 # decide if we have pangolin
@@ -101,13 +103,10 @@ else()
 	set(LIBZIP_LIBRARY "")
 endif()
 
-
 # compile main library.
-include_directories( ${CSPARSE_INCLUDE_DIR} ${CHOLMOD_INCLUDE_DIR}) 
 add_library(dso ${dso_SOURCE_FILES} ${dso_opencv_SOURCE_FILES} ${dso_pangolin_SOURCE_FILES})
 
 #set_property( TARGET dso APPEND_STRING PROPERTY COMPILE_FLAGS -Wall )
-
 
 if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin") # OSX
     set(BOOST_THREAD_LIBRARY boost_thread-mt)
@@ -120,13 +119,13 @@ if (OpenCV_FOUND AND Pangolin_FOUND)
 	message("--- compiling dso_dataset.")
 	add_executable(dso_dataset ${PROJECT_SOURCE_DIR}/src/main_dso_pangolin.cpp )
     target_link_libraries(dso_dataset 
-		dso 
-		${CSPARSE_LIBRARY}
+		dso
 		${Boost_SYSTEM_LIBRARY_RELEASE} 
 		${Boost_THREAD_LIBRARY_RELEASE}
 		${Boost_DATE_TIME_LIBRARY_RELEASE}
 		${Boost_CHRONO_LIBRARY_RELEASE}
 		${Boost_ATOMIC_LIBRARY_RELEASE}
+		${CSPARSE_LIBRARY}
 		${LIBZIP_LIBRARY} 
 		${Pangolin_LIBRARIES} 
 		${OpenCV_LIBS}

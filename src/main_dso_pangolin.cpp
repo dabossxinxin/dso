@@ -20,8 +20,6 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-#pragma once
-
 #include <thread>
 #include <locale.h>
 #include <signal.h>

@@ -20,15 +20,13 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
 #pragma once
 
- 
 #include "util/NumType.h"
 #include "vector"
 #include <math.h>
 #include "util/settings.h"
+#include "FullSystem/HessianBlocks.h"
 #include "OptimizationBackend/MatrixAccumulators.h"
 #include "IOWrapper/Output3DWrapper.h"
 

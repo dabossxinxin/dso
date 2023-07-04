@@ -23,6 +23,7 @@
 #pragma once
  
 #include "util/NumType.h"
+#include "FullSystem/HessianBlocks.h"
 
 namespace dso
 {

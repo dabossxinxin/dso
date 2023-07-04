@@ -1180,7 +1180,6 @@ namespace dso
 		newFrame->pointHessiansMarginalized.reserve(numPointsTotal*1.2f);
 		newFrame->pointHessiansOut.reserve(numPointsTotal*1.2f);
 
-
 		for (int y = patternPadding + 1; y < hG[0] - patternPadding - 2; y++)
 			for (int x = patternPadding + 1; x < wG[0] - patternPadding - 2; x++)
 			{

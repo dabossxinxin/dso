@@ -20,16 +20,20 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
 #pragma once
 
+#include <vector>
+#include <math.h>
+
 #include "util/NumType.h"
+#include "FullSystem/FullSystem.h"
+#include "FullSystem/HessianBlocks.h"
+#include "FullSystem/Residuals.h"
+#include "FullSystem/PixelSelector.h"
+#include "FullSystem/PixelSelector2.h"
 #include "OptimizationBackend/MatrixAccumulators.h"
 #include "IOWrapper/Output3DWrapper.h"
 #include "util/settings.h"
-#include "vector"
-#include <math.h>
 
 namespace dso
 {

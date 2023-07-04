@@ -28,11 +28,6 @@
  */
 
 #include "FullSystem/CoarseInitializer.h"
-#include "FullSystem/FullSystem.h"
-#include "FullSystem/HessianBlocks.h"
-#include "FullSystem/Residuals.h"
-#include "FullSystem/PixelSelector.h"
-#include "FullSystem/PixelSelector2.h"
 #include "util/nanoflann.h"
 
 #if !defined(__SSE3__) && !defined(__SSE2__) && !defined(__SSE1__)
@@ -428,7 +423,6 @@ namespace dso
 				point->energy_new = point->energy;
 				continue;
 			}
-
 
 			// add into energy.
 			E.updateSingle(energy);
