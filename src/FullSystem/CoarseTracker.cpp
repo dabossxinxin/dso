@@ -862,15 +862,9 @@ namespace dso
 		growDistBFS(numItems);
 	}
 
-
-
-
 	void CoarseDistanceMap::makeInlierVotes(std::vector<FrameHessian*> frameHessians)
 	{
-
 	}
-
-
 
 	void CoarseDistanceMap::growDistBFS(int bfsNum)
 	{
@@ -880,7 +874,10 @@ namespace dso
 		{
 			int bfsNum2 = bfsNum;
 			// TODO
-			//std::swap<Eigen::Vector2i*>(bfsList1,bfsList2);
+			//std::swap<Eigen::Vector2i*>(bfsList1, bfsList2);
+			Eigen::Vector2i *tmp = bfsList1;
+			bfsList1 = bfsList2;
+			bfsList2 = tmp;
 			bfsNum = 0;
 
 			if (k % 2 == 0)

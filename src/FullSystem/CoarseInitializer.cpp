@@ -869,6 +869,9 @@ namespace dso
 		}
 		// TODO
 		//std::swap<Vec10f*>(JbBuffer, JbBuffer_new);
+		Vec10f *tmp = JbBuffer;
+		JbBuffer = JbBuffer_new;
+		JbBuffer_new = tmp;
 	}
 
 	void CoarseInitializer::makeK(CalibHessian* HCalib)

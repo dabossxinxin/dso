@@ -400,6 +400,9 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 	{
 		// TODO
 		//std::swap<float>(idepth_min, idepth_max);
+		float tmp = idepth_min;
+		idepth_min = idepth_max;
+		idepth_max = tmp;
 	}
 
 	if(!std::isfinite(idepth_min) || !std::isfinite(idepth_max) || (idepth_max<0))
