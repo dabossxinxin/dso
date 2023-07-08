@@ -794,7 +794,6 @@ namespace dso
 				CoarseTracker* tmp = coarseTracker; coarseTracker = coarseTracker_forNewKF; coarseTracker_forNewKF = tmp;
 			}
 
-
 			Vec4 tres = trackNewCoarse(fh);
 			if (!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
 			{

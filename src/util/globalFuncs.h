@@ -29,15 +29,11 @@
 
 namespace dso
 {
-
-
-
 // reads interpolated element from a uchar* array
 // SSE2 optimization possible
 EIGEN_ALWAYS_INLINE float getInterpolatedElement(const float* const mat, const float x, const float y, const int width)
 {
-	//stats.num_pixelInterpolations++;
-
+	//stats.num_pixelInterpolations++
 	int ix = (int)x;
 	int iy = (int)y;
 	float dx = x - ix;
@@ -76,14 +72,13 @@ EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33(const Eigen::Vector
 	int iy = (int)y;
 	float dx = x - ix;
 	float dy = y - iy;
-	float dxdy = dx*dy;
-	const Eigen::Vector3f* bp = mat +ix+iy*width;
+	float dxdy = dx * dy;
+	const Eigen::Vector3f* bp = mat + ix + iy * width;
 
-
-	return dxdy * *(const Eigen::Vector3f*)(bp+1+width)
-	        + (dy-dxdy) * *(const Eigen::Vector3f*)(bp+width)
-	        + (dx-dxdy) * *(const Eigen::Vector3f*)(bp+1)
-			+ (1-dx-dy+dxdy) * *(const Eigen::Vector3f*)(bp);
+	return dxdy * *(const Eigen::Vector3f*)(bp + 1 + width)
+		+ (dy - dxdy) * *(const Eigen::Vector3f*)(bp + width)
+		+ (dx - dxdy) * *(const Eigen::Vector3f*)(bp + 1)
+		+ (1 - dx - dy + dxdy) * *(const Eigen::Vector3f*)(bp);
 }
 
 EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33OverAnd(const Eigen::Vector3f* const mat, const bool* overMat, const float x, const float y, const int width, bool& over_out)
@@ -103,6 +98,8 @@ EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33OverAnd(const Eigen:
 	        + (dx-dxdy) * *(const Eigen::Vector3f*)(bp+1)
 			+ (1-dx-dy+dxdy) * *(const Eigen::Vector3f*)(bp);
 }
+
+// 双线性插值求解所有通达的像素灰度
 EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33OverOr(const Eigen::Vector3f* const mat, const bool* overMat, const float x, const float y, const int width, bool& over_out)
 {
 	int ix = (int)x;
@@ -115,26 +112,26 @@ EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33OverOr(const Eigen::
 	const bool* bbp = overMat +ix+iy*width;
 	over_out = bbp[1+width] || bbp[1] || bbp[width] || bbp[0];
 
-	return dxdy * *(const Eigen::Vector3f*)(bp+1+width)
-	        + (dy-dxdy) * *(const Eigen::Vector3f*)(bp+width)
-	        + (dx-dxdy) * *(const Eigen::Vector3f*)(bp+1)
-			+ (1-dx-dy+dxdy) * *(const Eigen::Vector3f*)(bp);
+	return dxdy * *(const Eigen::Vector3f*)(bp + 1 + width)
+		+ (dy - dxdy) * *(const Eigen::Vector3f*)(bp + width)
+		+ (dx - dxdy) * *(const Eigen::Vector3f*)(bp + 1)
+		+ (1 - dx - dy + dxdy) * *(const Eigen::Vector3f*)(bp);
 }
 
+// 双线性插值计算插值点第一个通道的像素灰度
 EIGEN_ALWAYS_INLINE float getInterpolatedElement31(const Eigen::Vector3f* const mat, const float x, const float y, const int width)
 {
 	int ix = (int)x;
 	int iy = (int)y;
 	float dx = x - ix;
 	float dy = y - iy;
-	float dxdy = dx*dy;
-	const Eigen::Vector3f* bp = mat +ix+iy*width;
+	float dxdy = dx * dy;
+	const Eigen::Vector3f* bp = mat + ix + iy * width;
 
-
-	return dxdy * (*(const Eigen::Vector3f*)(bp+1+width))[0]
-	        + (dy-dxdy) * (*(const Eigen::Vector3f*)(bp+width))[0]
-	        + (dx-dxdy) * (*(const Eigen::Vector3f*)(bp+1))[0]
-			+ (1-dx-dy+dxdy) * (*(const Eigen::Vector3f*)(bp))[0];
+	return dxdy * (*(const Eigen::Vector3f*)(bp + 1 + width))[0]
+		+ (dy - dxdy) * (*(const Eigen::Vector3f*)(bp + width))[0]
+		+ (dx - dxdy) * (*(const Eigen::Vector3f*)(bp + 1))[0]
+		+ (1 - dx - dy + dxdy) * (*(const Eigen::Vector3f*)(bp))[0];
 }
 
 EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement13BiLin(const float* const mat, const float x, const float y, const int width)
@@ -161,6 +158,7 @@ EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement13BiLin(const float* c
 			botInt-topInt);
 }
 
+// 双线性插值计算插值点处像素灰度值以及梯度
 EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33BiLin(const Eigen::Vector3f* const mat, const float x, const float y, const int width)
 {
 	int ix = (int)x;
@@ -168,9 +166,9 @@ EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33BiLin(const Eigen::V
 	const Eigen::Vector3f* bp = mat +ix+iy*width;
 
 	float tl = (*(bp))[0];
-	float tr = (*(bp+1))[0];
-	float bl = (*(bp+width))[0];
-	float br = (*(bp+width+1))[0];
+	float tr = (*(bp + 1))[0];
+	float bl = (*(bp + width))[0];
+	float br = (*(bp + width + 1))[0];
 
 	float dx = x - ix;
 	float dy = y - iy;
@@ -180,9 +178,9 @@ EIGEN_ALWAYS_INLINE Eigen::Vector3f getInterpolatedElement33BiLin(const Eigen::V
 	float rightInt = dy * br + (1-dy) * tr;
 
 	return Eigen::Vector3f(
-			dx * rightInt + (1-dx) * leftInt,
-			rightInt-leftInt,
-			botInt-topInt);
+		dx * rightInt + (1 - dx) * leftInt,
+		rightInt - leftInt,
+		botInt - topInt);
 }
 EIGEN_ALWAYS_INLINE float getInterpolatedElement11Cub(const float* const p, const float x)	// for x=0, this returns p[1].
 {

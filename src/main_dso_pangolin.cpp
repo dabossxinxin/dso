@@ -421,7 +421,7 @@ int main(int argc, char** argv)
 
 		for (int ii = 0; ii < (int)idsToPlay.size(); ii++)
 		{
-			if (!fullSystem->initialized)	// if not initialized: reset start time.
+			if (!fullSystem->initialized)
 			{
 				gettimeofday(&tv_start, NULL);
 				started = clock();
@@ -430,12 +430,9 @@ int main(int argc, char** argv)
 
 			int i = idsToPlay[ii];
 
-
 			ImageAndExposure* img;
-			if (preload)
-				img = preloadedImages[ii];
-			else
-				img = reader->getImage(i);
+			if (preload) img = preloadedImages[ii];
+			else img = reader->getImage(i);
 
 			bool skipFrame = false;
 			if (playbackSpeed != 0)
@@ -462,6 +459,7 @@ int main(int argc, char** argv)
 
 			delete img;
 
+			// 若初始化失败或手动重置系统则reset系统
 			if (fullSystem->initFailed || setting_fullResetRequested)
 			{
 				if (ii < 250 || setting_fullResetRequested)
@@ -483,6 +481,7 @@ int main(int argc, char** argv)
 				}
 			}
 
+			// 若系统跟踪失败由于无重定位功能所以系统直接退出
 			if (fullSystem->isLost)
 			{
 				printf("LOST!!\n");
@@ -522,8 +521,9 @@ int main(int argc, char** argv)
 			tmlog.flush();
 			tmlog.close();
 		}
-		});
+	});
 
+	// 让显示线程运行在主线程中以便于MAC
 	if (viewer != 0)
 		viewer->run();
 
