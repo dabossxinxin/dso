@@ -29,13 +29,13 @@
 #include "util/MinimalImage.h"
 #include "map"
 
-namespace cv {
-        class Mat;
+namespace cv
+{
+	class Mat;
 }
 
 namespace dso
 {
-
 	class FrameHessian;
 	class CalibHessian;
 	class FrameShell;
@@ -108,7 +108,6 @@ namespace dso
 			Output3DWrapper() {}
 			virtual ~Output3DWrapper() {}
 
-
 			/*  Usage:
 			 *  Called once after each new Keyframe is inserted & optimized.
 			 *  [connectivity] contains for each frame-frame pair the number of [0] active residuals in between them,
@@ -120,10 +119,6 @@ namespace dso
 			 *  Always called, no overhead if not used.
 			 */
 			virtual void publishGraph(const std::map<uint64_t, Eigen::Vector2i, std::less<uint64_t>, Eigen::aligned_allocator<std::pair<const uint64_t, Eigen::Vector2i> > > &connectivity) {}
-
-
-
-
 
 			/* Usage:
 			 * Called after each new Keyframe is inserted & optimized, with all keyframes that were part of the active window during
@@ -140,10 +135,6 @@ namespace dso
 			 */
 			virtual void publishKeyframes(std::vector<FrameHessian*> &frames, bool final, CalibHessian* HCalib) {}
 
-
-
-
-
 			/* Usage:
 			 * Called once for each tracked frame, with the real-time, low-delay frame pose.
 			 *
@@ -151,10 +142,6 @@ namespace dso
 			 * Always called, no overhead if not used.
 			 */
 			virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) {}
-
-
-
-
 
 			/* Usage:
 			 * Called once for each new frame, before it is tracked (i.e., it doesn't have a pose yet).
@@ -164,9 +151,6 @@ namespace dso
 			 */
 			virtual void pushLiveFrame(FrameHessian* image) {}
 
-
-
-
 			/* called once after a new keyframe is created, with the color-coded, forward-warped inverse depthmap for that keyframe,
 			 * which is used for initial alignment of future frames. Meant for visualization.
 			 *
@@ -175,8 +159,6 @@ namespace dso
 			 */
 			virtual void pushDepthImage(MinimalImageB3* image) {}
 			virtual bool needPushDepthImage() { return false; }
-
-
 
 			/* Usage:
 			 * called once after a new keyframe is created, with the forward-warped inverse depthmap for that keyframe.
@@ -192,6 +174,9 @@ namespace dso
 
 			/* call on reset */
 			virtual void reset() {}
+
+			/* call on save pointcloud*/
+			virtual void save() {}
 		};
 	}
 }

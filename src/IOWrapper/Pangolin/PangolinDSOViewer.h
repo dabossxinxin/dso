@@ -66,18 +66,20 @@ namespace dso
 			virtual void publishKeyframes(std::vector<FrameHessian*> &frames, bool final, CalibHessian* HCalib) override;
 			virtual void publishCamPose(FrameShell* frame, CalibHessian* HCalib) override;
 
-
 			virtual void pushLiveFrame(FrameHessian* image) override;
 			virtual void pushDepthImage(MinimalImageB3* image) override;
 			virtual bool needPushDepthImage() override;
 
 			virtual void join() override;
-
 			virtual void reset() override;
+			virtual void save() override;
+			
 		private:
 
+			bool needSave;
 			bool needReset;
 			void reset_internal();
+			void save_internal();
 			void drawConstraints();
 
 			boost::thread runThread;

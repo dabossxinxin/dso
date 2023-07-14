@@ -61,7 +61,7 @@ namespace dso
 	struct PointHessian;
 	struct ImmaturePointTemporaryResidual;
 
-	template<typename T> 
+	template<typename T>
 	inline void deleteOut(std::vector<T*> &v, const int i)
 	{
 		delete v[i];
@@ -69,7 +69,7 @@ namespace dso
 		v.pop_back();
 	}
 
-	template<typename T> 
+	template<typename T>
 	inline void deleteOutPt(std::vector<T*> &v, const T* i)
 	{
 		delete i;
@@ -82,7 +82,7 @@ namespace dso
 			}
 	}
 
-	template<typename T> 
+	template<typename T>
 	inline void deleteOutOrder(std::vector<T*> &v, const int i)
 	{
 		delete v[i];
@@ -91,7 +91,7 @@ namespace dso
 		v.pop_back();
 	}
 
-	template<typename T> 
+	template<typename T>
 	inline void deleteOutOrder(std::vector<T*> &v, const T* element)
 	{
 		int i = -1;
@@ -133,7 +133,7 @@ namespace dso
 	class FullSystem {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-		FullSystem();
+			FullSystem();
 		virtual ~FullSystem();
 
 		// adds a new frame, and creates point & residual structs.

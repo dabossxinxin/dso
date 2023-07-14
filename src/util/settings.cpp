@@ -154,6 +154,8 @@ namespace dso
 
 	bool setting_fullResetRequested = false;
 
+	bool setting_fullSaveRequested = false;
+
 	bool setting_debugout_runquiet = false;
 
 	int sparsityFactor = 5;	// not actually a setting, only some legacy stuff for coarse initializer.

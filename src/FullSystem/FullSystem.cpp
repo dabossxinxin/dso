@@ -142,13 +142,11 @@ namespace dso
 		currentMinActDist = 2;
 		initialized = false;
 
-
 		ef = new EnergyFunctional();
 		ef->red = &this->treadReduce;
 
 		isLost = false;
 		initFailed = false;
-
 
 		needNewKFAfter = -1;
 
@@ -156,8 +154,6 @@ namespace dso
 		runMapping = true;
 		mappingThread = boost::thread(&FullSystem::mappingLoop, this);
 		lastRefStopID = 0;
-
-
 
 		minIdJetVisDebug = -1;
 		maxIdJetVisDebug = -1;
@@ -257,76 +253,81 @@ namespace dso
 	Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 	{
 		assert(allFrameHistory.size() > 0);
-		// set pose initialization.
 
+		// 进来的每一帧都在显示窗体中显示其图像
 		for (IOWrap::Output3DWrapper* ow : outputWrapper)
 			ow->pushLiveFrame(fh);
 
 		FrameHessian* lastF = coarseTracker->lastRef;
-
 		AffLight aff_last_2_l = AffLight(0, 0);
-
 		std::vector<SE3, Eigen::aligned_allocator<SE3>> lastF_2_fh_tries;
+
 		if (allFrameHistory.size() == 2)
-			for (unsigned int i = 0; i < lastF_2_fh_tries.size(); i++) lastF_2_fh_tries.push_back(SE3());
+		{
+			for (unsigned int i = 0; i < lastF_2_fh_tries.size(); i++)
+			{
+				lastF_2_fh_tries.push_back(SE3());
+			}
+		}
 		else
 		{
 			FrameShell* slast = allFrameHistory[allFrameHistory.size() - 2];
 			FrameShell* sprelast = allFrameHistory[allFrameHistory.size() - 3];
 			SE3 slast_2_sprelast;
 			SE3 lastF_2_slast;
-			{	// lock on global pose consistency!
+			{
 				boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
 				slast_2_sprelast = sprelast->camToWorld.inverse() * slast->camToWorld;
 				lastF_2_slast = slast->camToWorld.inverse() * lastF->shell->camToWorld;
 				aff_last_2_l = slast->aff_g2l;
 			}
-			SE3 fh_2_slast = slast_2_sprelast;// assumed to be the same as fh_2_slast.
+			SE3 fh_2_slast = slast_2_sprelast;
+			SE3 velocity = fh_2_slast.inverse() * lastF_2_slast;
 
-			// get last delta-movement.
-			lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast);	// assume constant motion.
-			lastF_2_fh_tries.push_back(fh_2_slast.inverse() * fh_2_slast.inverse() * lastF_2_slast);	// assume double motion (frame skipped)
-			lastF_2_fh_tries.push_back(SE3::exp(fh_2_slast.log()*0.5).inverse() * lastF_2_slast); // assume half motion.
-			lastF_2_fh_tries.push_back(lastF_2_slast); // assume zero motion.
-			lastF_2_fh_tries.push_back(SE3()); // assume zero motion FROM KF.
+			// 假设了五种运动模型分别为：匀速、倍速、半速、静止、回退到参考帧
+			lastF_2_fh_tries.emplace_back(velocity);
+			lastF_2_fh_tries.emplace_back(fh_2_slast.inverse() * velocity);
+			lastF_2_fh_tries.emplace_back(SE3::exp(fh_2_slast.log()*0.5).inverse() * lastF_2_slast);
+			lastF_2_fh_tries.emplace_back(lastF_2_slast);
+			lastF_2_fh_tries.emplace_back(SE3());
 
 			// just try a TON of different initializations (all rotations). In the end,
 			// if they don't work they will only be tried on the coarsest level, which is super fast anyway.
 			// also, if tracking rails here we loose, so we really, really want to avoid that.
 			for (float rotDelta = 0.02; rotDelta < 0.05; rotDelta++)
 			{
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, 0, 0), Vec3(0, 0, 0)));			// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, rotDelta, 0), Vec3(0, 0, 0)));			// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, 0, rotDelta), Vec3(0, 0, 0)));			// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, 0, 0), Vec3(0, 0, 0)));			// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, -rotDelta, 0), Vec3(0, 0, 0)));			// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, 0, -rotDelta), Vec3(0, 0, 0)));			// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, 0, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, -rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, 0, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, -rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, 0, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, -rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, 0, -rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, 0, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, -rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, -rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, -rotDelta, rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, -rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, -rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
-				lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1, rotDelta, rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, 0, 0), Vec3(0, 0, 0)));			// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, rotDelta, 0), Vec3(0, 0, 0)));			// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, 0, rotDelta), Vec3(0, 0, 0)));			// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, 0, 0), Vec3(0, 0, 0)));			// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, -rotDelta, 0), Vec3(0, 0, 0)));			// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, 0, -rotDelta), Vec3(0, 0, 0)));			// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, 0, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, -rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, 0, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, -rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, 0, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, -rotDelta, 0), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, 0, -rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, 0, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, -rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, -rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, -rotDelta, rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, -rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, -rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, rotDelta, -rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
+				lastF_2_fh_tries.emplace_back(velocity * SE3(Sophus::Quaterniond(1, rotDelta, rotDelta, rotDelta), Vec3(0, 0, 0)));	// assume constant motion.
 			}
 
 			if (!slast->poseValid || !sprelast->poseValid || !lastF->shell->poseValid)
 			{
 				lastF_2_fh_tries.clear();
-				lastF_2_fh_tries.push_back(SE3());
+				lastF_2_fh_tries.emplace_back(SE3());
 			}
 		}
 
@@ -338,6 +339,7 @@ namespace dso
 		// I'll keep track of the so-far best achieved residual for each level in achievedRes.
 		// If on a coarse level, tracking is WORSE than achievedRes, we will not continue to save time.
 
+		// 逐个尝试之前设置的运动模型计算得到跟踪的位姿
 		Vec5 achievedRes = Vec5::Constant(NAN);
 		bool haveOneGood = false;
 		int tryIterations = 0;
@@ -369,7 +371,7 @@ namespace dso
 					coarseTracker->lastResiduals[4]);
 			}
 
-			// do we have a new winner?
+			// 若跟踪到了一个相对正确的姿态则记录下来位姿光度参数以及帧光流参数
 			if (trackingIsGood && std::isfinite((float)coarseTracker->lastResiduals[0]) && !(coarseTracker->lastResiduals[0] >= achievedRes[0]))
 			{
 				//printf("take over. minRes %f -> %f!\n", achievedRes[0], coarseTracker->lastResiduals[0]);
@@ -379,17 +381,17 @@ namespace dso
 				haveOneGood = true;
 			}
 
-			// take over achieved res (always).
+			// 记录每一层金字塔跟踪出来的每一次层的残差最小值
 			if (haveOneGood)
 			{
 				for (int i = 0; i < 5; i++)
 				{
-					if (!std::isfinite((float)achievedRes[i]) || achievedRes[i] > coarseTracker->lastResiduals[i])	// take over if achievedRes is either bigger or NAN.
+					if (!std::isfinite((float)achievedRes[i]) || achievedRes[i] > coarseTracker->lastResiduals[i])
 						achievedRes[i] = coarseTracker->lastResiduals[i];
 				}
 			}
 
-			if (haveOneGood &&  achievedRes[0] < lastCoarseRMSE[0] * setting_reTrackThreshold)
+			if (haveOneGood && achievedRes[0] < lastCoarseRMSE[0] * setting_reTrackThreshold)
 				break;
 		}
 
@@ -403,7 +405,7 @@ namespace dso
 
 		lastCoarseRMSE = achievedRes;
 
-		// no lock required, as fh is not used anywhere yet.
+		// 跟踪完毕后记录新进来帧的位置和姿态
 		fh->shell->camToTrackingRef = lastF_2_fh.inverse();
 		fh->shell->trackingRef = lastF->shell;
 		fh->shell->aff_g2l = aff_g2l;
@@ -434,7 +436,13 @@ namespace dso
 	{
 		boost::unique_lock<boost::mutex> lock(mapMutex);
 
-		int trace_total = 0, trace_good = 0, trace_oob = 0, trace_out = 0, trace_skip = 0, trace_badcondition = 0, trace_uninitialized = 0;
+		int trace_total = 0;
+		int trace_good = 0;
+		int trace_oob = 0;
+		int trace_out = 0;
+		int trace_skip = 0;
+		int trace_badcondition = 0;
+		int trace_uninitialized = 0;
 
 		Mat33f K = Mat33f::Identity();
 		K(0, 0) = Hcalib.fxl();
@@ -442,12 +450,13 @@ namespace dso
 		K(0, 2) = Hcalib.cxl();
 		K(1, 2) = Hcalib.cyl();
 
-		for (FrameHessian* host : frameHessians)		// go through all active frames
+		// 遍历所有关键帧的未成熟点
+		// 将该点投影到最新进来的帧中优化出该点的深度
+		for (FrameHessian* host : frameHessians)
 		{
 			SE3 hostToNew = fh->PRE_worldToCam * host->PRE_camToWorld;
 			Mat33f KRKi = K * hostToNew.rotationMatrix().cast<float>() * K.inverse();
 			Vec3f Kt = K * hostToNew.translation().cast<float>();
-
 			Vec2f aff = AffLight::fromToVecExposure(host->ab_exposure, fh->ab_exposure, host->aff_g2l(), fh->aff_g2l()).cast<float>();
 
 			for (ImmaturePoint* ph : host->immaturePoints)
@@ -513,9 +522,8 @@ namespace dso
 			printf("SPARSITY:  MinActDist %f (need %d points, have %d points)!\n",
 				currentMinActDist, (int)(setting_desiredPointDensity), ef->nPoints);
 
+		// 为了保证激活点的均匀分布性质制作距离地图
 		FrameHessian* newestHs = frameHessians.back();
-
-		// make dist map.
 		coarseDistanceMap->makeK(&Hcalib);
 		coarseDistanceMap->makeDistanceMap(frameHessians, newestHs);
 
@@ -530,13 +538,12 @@ namespace dso
 			Mat33f KRKi = (coarseDistanceMap->K[1] * fhToNew.rotationMatrix().cast<float>() * coarseDistanceMap->Ki[0]);
 			Vec3f Kt = (coarseDistanceMap->K[1] * fhToNew.translation().cast<float>());
 
-
 			for (unsigned int i = 0; i < host->immaturePoints.size(); i += 1)
 			{
 				ImmaturePoint* ph = host->immaturePoints[i];
 				ph->idxInImmaturePoints = i;
 
-				// delete points that have never been traced successfully, or that are outlier on the last trace.
+				// 做点激活之前已经对所有未激活点做了一次trace若该点状态还是外点那么删除
 				if (!std::isfinite(ph->idepth_max) || ph->lastTraceStatus == IPS_OUTLIER)
 				{
 					//				immature_invalid_deleted++;
@@ -546,15 +553,14 @@ namespace dso
 					continue;
 				}
 
-				// can activate only if this is true.
+				// 点不是外点并且搜索范围已经缩小到8个像素以内并且点质量满足要求并且深度不为负数
 				bool canActivate = (ph->lastTraceStatus == IPS_GOOD
 					|| ph->lastTraceStatus == IPS_SKIPPED
 					|| ph->lastTraceStatus == IPS_BADCONDITION
 					|| ph->lastTraceStatus == IPS_OOB)
-					&& ph->lastTracePixelInterval < 8
+					&& ph->lastTracePixelInterval < 4
 					&& ph->quality > setting_minTraceQuality
 					&& (ph->idepth_max + ph->idepth_min) > 0;
-
 
 				// if I cannot activate the point, skip it. Maybe also delete it.
 				if (!canActivate)
@@ -577,9 +583,9 @@ namespace dso
 
 				if ((u > 0 && v > 0 && u < wG[1] && v < hG[1]))
 				{
-
+					// 满足以上条件的点并且满足距离地图中的均匀分布要求
+					// 此时将该点加入到待优化的序列中准备投影到所有关键帧中进行优化
 					float dist = coarseDistanceMap->fwdWarpedIDDistFinal[u + wG[1] * v] + (ptp[0] - floorf((float)(ptp[0])));
-
 					if (dist >= currentMinActDist * ph->my_type)
 					{
 						coarseDistanceMap->addIntoDistFinal(u, v);
@@ -599,6 +605,7 @@ namespace dso
 
 		std::vector<PointHessian*> optimized; optimized.resize(toOptimize.size());
 
+		// 将需要激活的点投影到其他帧中做一次优化
 		if (multiThreading)
 			treadReduce.reduce(boost::bind(&FullSystem::activatePointsMT_Reductor, this, &optimized, &toOptimize, _1, _2, _3, _4), 0, toOptimize.size(), 50);
 		else
@@ -609,6 +616,8 @@ namespace dso
 			PointHessian* newpoint = optimized[k];
 			ImmaturePoint* ph = toOptimize[k];
 
+			// 若点被成功优化则去掉主帧中对该点未激活状态的记录并添加激活点记录
+			// 若点没有被成功优化此时应该去掉这个未激活点并且删除其指针
 			if (newpoint != 0 && newpoint != (PointHessian*)((long)(-1)))
 			{
 				newpoint->host->immaturePoints[ph->idxInImmaturePoints] = 0;
@@ -630,6 +639,8 @@ namespace dso
 			}
 		}
 
+		// 上文中未激活点清空时只标记了指针为空
+		// 现在清理记录immaturePoints vector中为空的位置
 		for (FrameHessian* host : frameHessians)
 		{
 			for (int i = 0; i < (int)host->immaturePoints.size(); i++)
@@ -713,14 +724,11 @@ namespace dso
 							ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
 							host->pointHessiansOut.push_back(ph);
 						}
-
-
 					}
 					else
 					{
 						host->pointHessiansOut.push_back(ph);
 						ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
-
 
 						//printf("drop point in frame %d (%d goodRes, %d activeRes)\n", ph->host->idx, ph->numGoodResiduals, (int)ph->residuals.size());
 					}
@@ -728,7 +736,6 @@ namespace dso
 					host->pointHessians[i] = 0;
 				}
 			}
-
 
 			for (int i = 0; i < (int)host->pointHessians.size(); i++)
 			{
@@ -767,12 +774,10 @@ namespace dso
 			// use initializer!
 			if (coarseInitializer->frameID < 0)	// first frame set. fh is kept by coarseInitializer.
 			{
-
 				coarseInitializer->setFirst(&Hcalib, fh);
 			}
 			else if (coarseInitializer->trackFrame(fh, outputWrapper))	// if SNAPPED
 			{
-
 				initializeFromInitializer(fh);
 				lock.unlock();
 				deliverTrackedFrame(fh, true);
@@ -790,10 +795,14 @@ namespace dso
 			// =========================== SWAP tracking reference?. =========================
 			if (coarseTracker_forNewKF->refFrameID > coarseTracker->refFrameID)
 			{
+				// 涉及到多线程的计算此处交换tracker避免线程冲突
 				boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
-				CoarseTracker* tmp = coarseTracker; coarseTracker = coarseTracker_forNewKF; coarseTracker_forNewKF = tmp;
+				CoarseTracker* tmp = coarseTracker; 
+				coarseTracker = coarseTracker_forNewKF; 
+				coarseTracker_forNewKF = tmp;
 			}
 
+			// 新的图像进来使用trackNewCoarse进行跟踪
 			Vec4 tres = trackNewCoarse(fh);
 			if (!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
 			{
@@ -802,6 +811,7 @@ namespace dso
 				return;
 			}
 
+			// 跟踪完成后根据计算得到的像素流动值判断是否需插入关键帧
 			bool needToMakeKF = false;
 			if (setting_keyframesPerSecond > 0)
 			{
@@ -810,6 +820,7 @@ namespace dso
 			}
 			else
 			{
+				// 计算光度参数变化程度
 				Vec2 refToFh = AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
 					coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
 
@@ -823,10 +834,13 @@ namespace dso
 
 			}
 
+			// TODO：显示窗体中所有进来的帧都显示而不区分是否为关键帧？
 			for (IOWrap::Output3DWrapper* ow : outputWrapper)
 				ow->publishCamPose(fh->shell, &Hcalib);
 
 			lock.unlock();
+
+			// 通过该帧是否为关键帧的判断决定
 			deliverTrackedFrame(fh, needToMakeKF);
 			return;
 		}
@@ -834,8 +848,6 @@ namespace dso
 
 	void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 	{
-
-
 		if (linearizeOperation)
 		{
 			if (goStepByStep && lastRefStopID != coarseTracker->refFrameID)
@@ -852,6 +864,7 @@ namespace dso
 			}
 			else handleKey(IOWrap::waitKey(1));
 
+			// 插入关键帧OR不插入关键帧
 			if (needKF) makeKeyFrame(fh);
 			else makeNonKeyFrame(fh);
 		}
@@ -1041,7 +1054,6 @@ namespace dso
 
 		// =========================== REMOVE OUTLIER =========================
 		removeOutliers();
-
 		{
 			boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
 			coarseTracker_forNewKF->makeK(&Hcalib);
@@ -1073,12 +1085,13 @@ namespace dso
 		}
 
 		// =========================== Marginalize Frames =========================
-
 		for (unsigned int i = 0; i < frameHessians.size(); i++)
+		{
 			if (frameHessians[i]->flaggedForMarginalization)
 			{
 				marginalizeFrame(frameHessians[i]); i = 0;
 			}
+		}
 
 		printLogLine();
 		//printEigenValLine();
@@ -1103,7 +1116,6 @@ namespace dso
 		firstFrame->pointHessians.reserve(wG[0] * hG[0] * 0.2f);
 		firstFrame->pointHessiansMarginalized.reserve(wG[0] * hG[0] * 0.2f);
 		firstFrame->pointHessiansOut.reserve(wG[0] * hG[0] * 0.2f);
-
 
 		float sumID = 1e-5, numID = 1e-5;
 		for (int i = 0; i < coarseInitializer->numPoints[0]; i++)
@@ -1146,7 +1158,6 @@ namespace dso
 		SE3 firstToNew = coarseInitializer->thisToNext;
 		firstToNew.translation() /= rescaleFactor;
 
-
 		// really no lock required, as we are initializing.
 		{
 			boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
@@ -1161,7 +1172,6 @@ namespace dso
 			newFrame->setEvalPT_scaled(newFrame->shell->camToWorld.inverse(), newFrame->shell->aff_g2l);
 			newFrame->shell->trackingRef = firstFrame->shell;
 			newFrame->shell->camToTrackingRef = firstToNew.inverse();
-
 		}
 
 		initialized = true;
@@ -1253,7 +1263,6 @@ namespace dso
 		if (!setting_logStuff) return;
 		if (ef->lastHS.rows() < 12) return;
 
-
 		MatXX Hp = ef->lastHS.bottomRightCorner(ef->lastHS.cols() - CPARS, ef->lastHS.cols() - CPARS);
 		MatXX Ha = ef->lastHS.bottomRightCorner(ef->lastHS.cols() - CPARS, ef->lastHS.cols() - CPARS);
 		int n = Hp.cols() / 8;
@@ -1332,7 +1341,6 @@ namespace dso
 	void FullSystem::printFrameLifetimes()
 	{
 		if (!setting_logStuff) return;
-
 
 		boost::unique_lock<boost::mutex> lock(trackMutex);
 

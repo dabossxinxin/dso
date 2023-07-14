@@ -21,7 +21,6 @@
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 /*
  * KFBuffer.cpp
  *
@@ -42,6 +41,7 @@
 
 namespace dso
 {
+	// 内存对齐的操作
 	template<int b, typename T>
 	T* allocAligned(int size, std::vector<T*> &rawPtrVec)
 	{
@@ -68,7 +68,6 @@ namespace dso
 			pc_v[lvl] = allocAligned<4, float>(wl*hl, ptrToDelete);
 			pc_idepth[lvl] = allocAligned<4, float>(wl*hl, ptrToDelete);
 			pc_color[lvl] = allocAligned<4, float>(wl*hl, ptrToDelete);
-
 		}
 
 		// warped buffers
@@ -81,17 +80,20 @@ namespace dso
 		buf_warped_weight = allocAligned<4, float>(ww*hh, ptrToDelete);
 		buf_warped_refColor = allocAligned<4, float>(ww*hh, ptrToDelete);
 
-
 		newFrame = 0;
 		lastRef = 0;
 		debugPlot = debugPrint = true;
 		w[0] = h[0] = 0;
 		refFrameID = -1;
 	}
+
 	CoarseTracker::~CoarseTracker()
 	{
 		for (float* ptr : ptrToDelete)
+		{
 			delete[] ptr;
+			ptr = NULL;
+		}
 		ptrToDelete.clear();
 	}
 
@@ -178,13 +180,10 @@ namespace dso
 				}
 		}
 
-
 		// dilate idepth by 1.
 		for (int lvl = 0; lvl < 2; lvl++)
 		{
 			int numIts = 1;
-
-
 			for (int it = 0; it < numIts; it++)
 			{
 				int wh = w[lvl] * h[lvl] - w[lvl];
@@ -208,7 +207,6 @@ namespace dso
 				}
 			}
 		}
-
 
 		// dilate idepth by 1 (2 on lower levels).
 		for (int lvl = 2; lvl < pyrLevelsUsed; lvl++)
@@ -234,7 +232,6 @@ namespace dso
 			}
 		}
 
-
 		// normalize idepths and weights.
 		for (int lvl = 0; lvl < pyrLevelsUsed; lvl++)
 		{
@@ -250,7 +247,6 @@ namespace dso
 			float* lpc_idepth = pc_idepth[lvl];
 			float* lpc_color = pc_color[lvl];
 
-
 			for (int y = 2; y < hl - 2; y++)
 				for (int x = 2; x < wl - 2; x++)
 				{
@@ -264,8 +260,6 @@ namespace dso
 						lpc_idepth[lpc_n] = idepthl[i];
 						lpc_color[lpc_n] = dIRefl[i][0];
 
-
-
 						if (!std::isfinite(lpc_color[lpc_n]) || !(idepthl[i] > 0))
 						{
 							idepthl[i] = -1;
@@ -274,14 +268,13 @@ namespace dso
 						lpc_n++;
 					}
 					else
+					{
 						idepthl[i] = -1;
-
+					}
 					weightSumsl[i] = 1;
 				}
-
 			pc_n[lvl] = lpc_n;
 		}
-
 	}
 
 	void CoarseTracker::calcGSSSE(int lvl, Mat88 &H_out, Vec8 &b_out, const SE3 &refToNew, AffLight aff_g2l)
@@ -307,7 +300,6 @@ namespace dso
 			__m128 v = _mm_load_ps(buf_warped_v + i);
 			__m128 id = _mm_load_ps(buf_warped_idepth + i);
 
-
 			acc.updateSSE_eighted(
 				_mm_mul_ps(id, dx),
 				_mm_mul_ps(id, dy),
@@ -325,10 +317,12 @@ namespace dso
 				_mm_load_ps(buf_warped_weight + i));
 		}
 
+		// 获取残差关于位姿以及光度参数的Hessian以及b
 		acc.finish();
 		H_out = acc.H.topLeftCorner<8, 8>().cast<double>() * (1.0f / n);
 		b_out = acc.H.topRightCorner<8, 1>().cast<double>() * (1.0f / n);
 
+		// 对变量进行缩放操作保证Hessian矩阵的条件数不那么大
 		H_out.block<8, 3>(0, 0) *= SCALE_XI_ROT;
 		H_out.block<8, 3>(0, 3) *= SCALE_XI_TRANS;
 		H_out.block<8, 1>(0, 6) *= SCALE_A;
@@ -352,24 +346,21 @@ namespace dso
 
 		int wl = w[lvl];
 		int hl = h[lvl];
-		Eigen::Vector3f* dINewl = newFrame->dIp[lvl];
 		float fxl = fx[lvl];
 		float fyl = fy[lvl];
 		float cxl = cx[lvl];
 		float cyl = cy[lvl];
-
+		Eigen::Vector3f* dINewl = newFrame->dIp[lvl];
 
 		Mat33f RKi = (refToNew.rotationMatrix().cast<float>() * Ki[lvl]);
 		Vec3f t = (refToNew.translation()).cast<float>();
 		Vec2f affLL = AffLight::fromToVecExposure(lastRef->ab_exposure, newFrame->ab_exposure, lastRef_aff_g2l, aff_g2l).cast<float>();
-
 
 		float sumSquaredShiftT = 0;
 		float sumSquaredShiftRT = 0;
 		float sumSquaredShiftNum = 0;
 
 		float maxEnergy = 2 * setting_huberTH*cutoffTH - setting_huberTH * setting_huberTH;	// energy for r=setting_coarseCutoffTH.
-
 
 		MinimalImageB3* resImage = 0;
 		if (debugPlot)
@@ -384,7 +375,6 @@ namespace dso
 		float* lpc_idepth = pc_idepth[lvl];
 		float* lpc_color = pc_color[lvl];
 
-
 		for (int i = 0; i < nl; i++)
 		{
 			float id = lpc_idepth[i];
@@ -398,6 +388,7 @@ namespace dso
 			float Kv = fyl * v + cyl;
 			float new_idepth = id / pt[2];
 
+			// 只在底层金字塔中统计像素的移动
 			if (lvl == 0 && i % 32 == 0)
 			{
 				// translation only (positive)
@@ -424,6 +415,7 @@ namespace dso
 				//translation and rotation (positive)
 				//already have it.
 
+				// 统计像素的移动大小
 				sumSquaredShiftT += (KuT - x)*(KuT - x) + (KvT - y)*(KvT - y);
 				sumSquaredShiftT += (KuT2 - x)*(KuT2 - x) + (KvT2 - y)*(KvT2 - y);
 				sumSquaredShiftRT += (Ku - x)*(Ku - x) + (Kv - y)*(Kv - y);
@@ -431,16 +423,14 @@ namespace dso
 				sumSquaredShiftNum += 2;
 			}
 
+			// 若投影点落在图像范围之外则不考虑该点
 			if (!(Ku > 2 && Kv > 2 && Ku < wl - 3 && Kv < hl - 3 && new_idepth > 0)) continue;
-
-
 
 			float refColor = lpc_color[i];
 			Vec3f hitColor = getInterpolatedElement33(dINewl, Ku, Kv, wl);
 			if (!std::isfinite((float)hitColor[0])) continue;
 			float residual = hitColor[0] - (float)(affLL[0] * refColor + affLL[1]);
 			float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
-
 
 			if (fabs(residual) > cutoffTH)
 			{
@@ -456,6 +446,7 @@ namespace dso
 				E += hw * residual*residual*(2 - hw);
 				numTermsInE++;
 
+				// 记录参考帧在最新帧上投影点的相关信息
 				buf_warped_idepth[numTermsInWarped] = new_idepth;
 				buf_warped_u[numTermsInWarped] = u;
 				buf_warped_v[numTermsInWarped] = v;
@@ -468,6 +459,7 @@ namespace dso
 			}
 		}
 
+		// 128位SSE加速一次可计算4个float所以对于不足的部分补0
 		while (numTermsInWarped % 4 != 0)
 		{
 			buf_warped_idepth[numTermsInWarped] = 0;
@@ -481,7 +473,6 @@ namespace dso
 			numTermsInWarped++;
 		}
 		buf_warped_n = numTermsInWarped;
-
 
 		if (debugPlot)
 		{
@@ -529,7 +520,6 @@ namespace dso
 		lastResiduals.setConstant(NAN);
 		lastFlowIndicators.setConstant(1000);
 
-
 		newFrame = newFrameHessian;
 		int maxIterations[] = { 10,20,50,50,50 };
 		float lambdaExtrapolationLimit = 0.001;
@@ -539,10 +529,12 @@ namespace dso
 
 		bool haveRepeated = false;
 
-
+		// 从金字塔顶层->底层进行跟踪
 		for (int lvl = coarsestLvl; lvl >= 0; lvl--)
 		{
-			Mat88 H; Vec8 b;
+			// 此处使用60%以上的点参与残差计算
+			// 问题在于无法正确给出一个固定的阈值剔除另外40%的点
+			// 因此此处设置一个光度截断误差并动态调整该值保证取得60%以上的点参与残差计算
 			float levelCutoffRepeat = 1;
 			Vec6 resOld = calcRes(lvl, refToNew_current, aff_g2l_current, setting_coarseCutoffTH*levelCutoffRepeat);
 			while (resOld[5] > 0.6 && levelCutoffRepeat < 50)
@@ -554,10 +546,12 @@ namespace dso
 					printf("INCREASING cutoff to %f (ratio is %f)!\n", setting_coarseCutoffTH*levelCutoffRepeat, resOld[5]);
 			}
 
+			// 在calcRes计算残差并且得到关键帧在最新帧中的投影信息
+			// calcGSSSE函数的功能为利用这些投影信息计算Hessian以及b
+			Mat88 H; Vec8 b;
 			calcGSSSE(lvl, H, b, refToNew_current, aff_g2l_current);
 
 			float lambda = 0.01;
-
 			if (debugPrint)
 			{
 				Vec2f relAff = AffLight::fromToVecExposure(lastRef->ab_exposure, newFrame->ab_exposure, lastRef_aff_g2l, aff_g2l_current).cast<float>();
@@ -571,24 +565,26 @@ namespace dso
 				std::cout << refToNew_current.log().transpose() << " AFF " << aff_g2l_current.vec().transpose() << " (rel " << relAff.transpose() << ")\n";
 			}
 
-
 			for (int iteration = 0; iteration < maxIterations[lvl]; iteration++)
 			{
 				Mat88 Hl = H;
 				for (int i = 0; i < 8; i++) Hl(i, i) *= (1 + lambda);
 				Vec8 inc = Hl.ldlt().solve(-b);
 
-				if (setting_affineOptModeA < 0 && setting_affineOptModeB < 0)	// fix a, b
+				// 固定光度参数a和b
+				if (setting_affineOptModeA < 0 && setting_affineOptModeB < 0)
 				{
 					inc.head<6>() = Hl.topLeftCorner<6, 6>().ldlt().solve(-b.head<6>());
 					inc.tail<2>().setZero();
 				}
-				if (!(setting_affineOptModeA < 0) && setting_affineOptModeB < 0)	// fix b
+				// 仅固定光度参数b
+				if (!(setting_affineOptModeA < 0) && setting_affineOptModeB < 0)
 				{
 					inc.head<7>() = Hl.topLeftCorner<7, 7>().ldlt().solve(-b.head<7>());
 					inc.tail<1>().setZero();
 				}
-				if (setting_affineOptModeA < 0 && !(setting_affineOptModeB < 0))	// fix a
+				// 仅固定光度参数a
+				if (setting_affineOptModeA < 0 && !(setting_affineOptModeB < 0))
 				{
 					Mat88 HlStitch = Hl;
 					Vec8 bStitch = b;
@@ -602,6 +598,7 @@ namespace dso
 					inc[7] = incStitch[6];
 				}
 
+				// TODO：此处为什么要对lambda做出限制并且将该限制附加在解中
 				float extrapFac = 1;
 				if (lambda < lambdaExtrapolationLimit) extrapFac = sqrt(sqrt(lambdaExtrapolationLimit / lambda));
 				inc *= extrapFac;
@@ -614,6 +611,7 @@ namespace dso
 
 				if (!std::isfinite(incScaled.sum())) incScaled.setZero();
 
+				// TODO：此处左乘的原因是什么
 				SE3 refToNew_new = SE3::exp((Vec6)(incScaled.head<6>())) * refToNew_current;
 				AffLight aff_g2l_new = aff_g2l_current;
 				aff_g2l_new.a += incScaled[6];
@@ -636,6 +634,9 @@ namespace dso
 						inc.norm());
 					std::cout << refToNew_new.log().transpose() << " AFF " << aff_g2l_new.vec().transpose() << " (rel " << relAff.transpose() << ")\n";
 				}
+
+				// 如果接受当前迭代步骤此时则降低lambda加快迭代的收敛
+				// 如果拒绝当前迭代步骤此时则增加lambda加快残差的降低
 				if (accept)
 				{
 					calcGSSSE(lvl, H, b, refToNew_new, aff_g2l_new);
@@ -650,6 +651,7 @@ namespace dso
 					if (lambda < lambdaExtrapolationLimit) lambda = lambdaExtrapolationLimit;
 				}
 
+				// 当得到的迭代解已经非常小了此时可以终止迭代
 				if (!(inc.norm() > 1e-3))
 				{
 					if (debugPrint)
@@ -658,12 +660,13 @@ namespace dso
 				}
 			}
 
-			// set last residual for that level, as well as flow indicators.
+			// 得到当前金字塔层经过优化后的残差并与阈值进行对比
+			// 若大于1.5倍的最低阈值则说明当前运动模型不准确直接跳过
 			lastResiduals[lvl] = sqrtf((float)(resOld[0] / resOld[1]));
 			lastFlowIndicators = resOld.segment<3>(2);
 			if (lastResiduals[lvl] > 1.5*minResForAbort[lvl]) return false;
 
-
+			// 若levelCutoffRepeat被使用说明当前金字塔层需要再重复计算一次
 			if (levelCutoffRepeat > 1 && !haveRepeated)
 			{
 				lvl++;
@@ -672,11 +675,11 @@ namespace dso
 			}
 		}
 
-		// set!
+		// 基于金字塔的迭代完成此时给位姿以及光度参数赋值
 		lastToNew_out = refToNew_current;
 		aff_g2l_out = aff_g2l_current;
 
-
+		// 对优化得到的光度系数进行复判若过大说明优化不正确
 		if ((setting_affineOptModeA != 0 && (fabsf(aff_g2l_out.a) > 1.2))
 			|| (setting_affineOptModeB != 0 && (fabsf(aff_g2l_out.b) > 200)))
 			return false;

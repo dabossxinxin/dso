@@ -47,6 +47,7 @@ namespace dso
 				internalResImg = new MinimalImageB3(w, h);
 				videoImgChanged = kfImgChanged = resImgChanged = true;
 
+				// 将3D视口中所要显示的图像直接初始化为黑图
 				internalVideoImg->setBlack();
 				internalKFImg->setBlack();
 				internalResImg->setBlack();
@@ -88,8 +89,7 @@ namespace dso
 				.SetBounds(0.0, 1.0, pangolin::Attach::Pix(UI_WIDTH), 1.0, -w / (float)h)
 				.SetHandler(new pangolin::Handler3D(Visualization3D_camera));
 
-
-			// 3 images
+			// 在视窗中添加三个图像显示视窗
 			pangolin::View& d_kfDepth = pangolin::Display("imgKFDepth")
 				.SetAspect(w / (float)h);
 
@@ -114,7 +114,6 @@ namespace dso
 			pangolin::CreatePanel("ui").SetBounds(0.0, 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
 
 			pangolin::Var<int> settings_pointCloudMode("ui.PC_mode", 1, 1, 4, false);
-
 			pangolin::Var<bool> settings_showKFCameras("ui.KFCam", false, true);
 			pangolin::Var<bool> settings_showCurrentCamera("ui.CurrCam", true, true);
 			pangolin::Var<bool> settings_showTrajectory("ui.Trajectory", true, true);
@@ -137,6 +136,7 @@ namespace dso
 			pangolin::Var<double> settings_minRelBS("ui.minRelativeBS", 0.1, 0, 1, false);
 
 			pangolin::Var<bool> settings_resetButton("ui.Reset", false, false);
+			pangolin::Var<bool> settings_saveButton("ui.Save", false, false);
 
 			pangolin::Var<int> settings_nPts("ui.activePoints", setting_desiredPointDensity, 50, 5000, false);
 			pangolin::Var<int> settings_nCandidates("ui.pointCandidates", setting_desiredImmatureDensity, 50, 5000, false);
@@ -164,7 +164,6 @@ namespace dso
 					{
 						float blue[3] = { 0,0,1 };
 						if (this->settings_showKFCameras) fh->drawCam(1, blue, 0.1);
-
 
 						refreshed += (int)(fh->refreshPC(refreshed < 10, this->settings_scaledVarTH, this->settings_absVarTH,
 							this->settings_pointCloudMode, this->settings_minRelBS, this->settings_sparsity));
@@ -250,12 +249,18 @@ namespace dso
 				setting_kfGlobalWeight = settings_kfFrequency.Get();
 				setting_minGradHistAdd = settings_gradHistAdd.Get();
 
-
 				if (settings_resetButton.Get())
 				{
 					printf("RESET!\n");
 					settings_resetButton.Reset();
 					setting_fullResetRequested = true;
+				}
+
+				if (settings_saveButton.Get())
+				{
+					printf("SavePointCloud!\n");
+					settings_saveButton.Reset();
+					setting_fullSaveRequested = true;
 				}
 
 				// Swap frames and Process Events
@@ -283,6 +288,19 @@ namespace dso
 		void PangolinDSOViewer::reset()
 		{
 			needReset = true;
+		}
+
+		void PangolinDSOViewer::save()
+		{
+			needSave = true;
+		}
+		
+		void PangolinDSOViewer::save_internal()
+		{
+			std::string filename = "./DSOMAP.txt";
+			std::ofstream fout(filename.c_str(), std::ios::app);
+
+			needSave = false;
 		}
 
 		void PangolinDSOViewer::reset_internal()
@@ -427,6 +445,7 @@ namespace dso
 			}
 			model3DMutex.unlock();
 		}
+
 		void PangolinDSOViewer::publishKeyframes(
 			std::vector<FrameHessian*> &frames,
 			bool final,
@@ -447,6 +466,7 @@ namespace dso
 				keyframesByKFID[fh->frameID]->setFromKF(fh, HCalib);
 			}
 		}
+
 		void PangolinDSOViewer::publishCamPose(FrameShell* frame,
 			CalibHessian* HCalib)
 		{
@@ -465,7 +485,6 @@ namespace dso
 			currentCam->setFromF(frame, HCalib);
 			allFramePoses.push_back(frame->camToWorld.translation().cast<float>());
 		}
-
 
 		void PangolinDSOViewer::pushLiveFrame(FrameHessian* image)
 		{
@@ -487,9 +506,9 @@ namespace dso
 		{
 			return setting_render_displayDepth;
 		}
+
 		void PangolinDSOViewer::pushDepthImage(MinimalImageB3* image)
 		{
-
 			if (!setting_render_displayDepth) return;
 			if (disableAllDisplay) return;
 

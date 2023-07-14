@@ -50,7 +50,7 @@ namespace dso
 		// idepth / isgood / energy during optimization.
 		float idepth;
 		bool isGood;
-		Vec2f energy;		// (UenergyPhotometric, energyRegularizer)
+		Vec2f energy;		// (energyPhotometric, energyRegularizer)
 		bool isGood_new;
 		float idepth_new;
 		Vec2f energy_new;
@@ -82,9 +82,9 @@ namespace dso
 		CoarseInitializer(int w, int h);
 		~CoarseInitializer();
 
-
 		void setFirst(CalibHessian* HCalib, FrameHessian* newFrameHessian);
 		bool trackFrame(FrameHessian* newFrameHessian, std::vector<IOWrap::Output3DWrapper*> &wraps);
+		bool trackFrameV2(FrameHessian* newFrameHessian, std::vector<IOWrap::Output3DWrapper*> &wraps);
 		void calcTGrads(FrameHessian* newFrameHessian);
 
 		int frameID;
@@ -136,13 +136,18 @@ namespace dso
 		float regWeight;
 		float couplingWeight;
 
+		Vec3f calcResAndGSV2(
+			int lvl, Mat88f& Hu, Mat88f& Hw, Mat88f& Hv,
+			Vec8f& bu, Vec8f& bv, const SE3& refToNew,
+			AffLight refToNew_aff, bool plot);
+
 		Vec3f calcResAndGS(
 			int lvl,
 			Mat88f &H_out, Vec8f &b_out,
 			Mat88f &H_out_sc, Vec8f &b_out_sc,
 			const SE3 &refToNew, AffLight refToNew_aff,
 			bool plot);
-		Vec3f calcEC(int lvl); // returns OLD NERGY, NEW ENERGY, NUM TERMS.
+		Vec3f calcEC(int lvl); // returns OLD ENERGY, NEW ENERGY, NUM TERMS.
 		void optReg(int lvl);
 
 		void propagateUp(int srcLvl);

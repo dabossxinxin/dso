@@ -52,10 +52,12 @@ namespace dso
 		void setCoarseTrackingRef(
 			std::vector<FrameHessian*> frameHessians);
 
+		// 获取相机内参填充到CoarseTracker中
 		void makeK(
 			CalibHessian* HCalib);
 
-		bool debugPrint, debugPlot;
+		bool debugPrint;
+		bool debugPlot;
 
 		Mat33f K[PYR_LEVELS];
 		Mat33f Ki[PYR_LEVELS];
@@ -115,6 +117,7 @@ namespace dso
 		Accumulator9 acc;
 	};
 
+	// 距离地图用于控制激活点的分布
 	class CoarseDistanceMap {
 	public:
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW;

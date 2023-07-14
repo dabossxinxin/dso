@@ -40,6 +40,7 @@ namespace dso
 			color[idx] = ptc[0];
 			if (!std::isfinite(color[idx])) { energyTH = NAN; return; }
 
+			// 降低高梯度值部分点的权重避免高梯度点运动后能量变化太大
 			gradH += ptc.tail<2>()  * ptc.tail<2>().transpose();
 			weights[idx] = sqrtf(setting_outlierTHSumComponent / (setting_outlierTHSumComponent + ptc.tail<2>().squaredNorm()));
 		}
@@ -77,10 +78,10 @@ namespace dso
 
 		//	const float stepsize = 1.0;				// stepsize for initial discrete search.
 		//	const int GNIterations = 3;				// max # GN iterations
-		//	const float GNThreshold = 0.1;				// GN stop after this stepsize.
-		//	const float extraSlackOnTH = 1.2;			// for energy-based outlier check, be slightly more relaxed by this factor.
-		//	const float slackInterval = 0.8;			// if pixel-interval is smaller than this, leave it be.
-		//	const float minImprovementFactor = 2;		// if pixel-interval is smaller than this, leave it be.
+		//	const float GNThreshold = 0.1;			// GN stop after this stepsize.
+		//	const float extraSlackOnTH = 1.2;		// for energy-based outlier check, be slightly more relaxed by this factor.
+		//	const float slackInterval = 0.8;		// if pixel-interval is smaller than this, leave it be.
+		//	const float minImprovementFactor = 2;	// if pixel-interval is smaller than this, leave it be.
 		// ============== project min and max. return if one of them is OOB ===================
 		Vec3f pr = hostToFrame_KRKi * Vec3f(u, v, 1);
 		Vec3f ptpMin = pr + hostToFrame_Kt * idepth_min;
@@ -174,7 +175,7 @@ namespace dso
 		float b = (Vec2f(dy, -dx).transpose() * gradH * Vec2f(dy, -dx));
 		float errorInPixel = 0.2f + 0.2f * (a + b) / a;
 
-		// 计算未成熟点的匹配误差
+		// 搜索距离应该大于匹配误差
 		if (errorInPixel*setting_trace_minImprovementFactor > dist && std::isfinite(idepth_max))
 		{
 			if (debugPrint)
@@ -209,6 +210,7 @@ namespace dso
 		int numSteps = 1.9999f + dist / setting_trace_stepsize;
 		Mat22f Rplane = hostToFrame_KRKi.topLeftCorner<2, 2>();
 
+		// TODO：randShift代表的几何意义是什么
 		float randShift = uMin * 1000 - floorf(uMin * 1000);
 		float ptx = uMin - randShift * dx;
 		float pty = vMin - randShift * dy;
@@ -230,6 +232,7 @@ namespace dso
 		int bestIdx = -1;
 		if (numSteps >= 100) numSteps = 99;
 
+		// 在搜索方向上搜索匹配残差最小的位置
 		for (int i = 0; i < numSteps; i++)
 		{
 			float energy = 0;
@@ -292,16 +295,18 @@ namespace dso
 				float dResdDist = dx * hitColor[1] + dy * hitColor[2];
 				float hw = fabs(residual) < setting_huberTH ? 1 : setting_huberTH / fabs(residual);
 
+				// 计算带上权重的Hessian以及b
+				// energy计算要再带上weights表示pattern点的权重
 				H += hw * dResdDist*dResdDist;
 				b += hw * residual*dResdDist;
 				energy += weights[idx] * weights[idx] * hw *residual*residual*(2 - hw);
 			}
 
+			// 若所得到的能量大于已有的最佳能量说明上一步做的迭代跨度过大，此时把上一步迭代跨度缩小
+			// 若所得到的能量小于已有的最佳能量说明当前迭代有效，将迭代值加到当前值上面
 			if (energy > bestEnergy)
 			{
 				gnStepsBad++;
-
-				// do a smaller step from old point.
 				stepBack *= 0.5;
 				bestU = uBak + stepBack * dx;
 				bestV = vBak + stepBack * dy;
@@ -334,6 +339,7 @@ namespace dso
 						uBak, vBak, bestU, bestV);
 			}
 
+			// 迭代步长已经很小了此时直接终止迭代就可以了
 			if (fabsf(stepBack) < setting_trace_GNThreshold) break;
 		}
 
