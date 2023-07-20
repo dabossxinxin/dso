@@ -48,7 +48,7 @@ namespace dso
 	class EFFrame;
 	class EFPoint;
 
-#define SCALE_IDEPTH 1.0f		// scales internal value to idepth.
+#define SCALE_IDEPTH 1.0f
 #define SCALE_XI_ROT 1.0f
 #define SCALE_XI_TRANS 0.5f
 #define SCALE_F 50.0f
@@ -89,7 +89,6 @@ namespace dso
 
 		float distanceLL;
 
-
 		inline ~FrameFramePrecalc() {}
 		inline FrameFramePrecalc() { host = target = 0; }
 		void set(FrameHessian* host, FrameHessian* target, CalibHessian* HCalib);
@@ -101,14 +100,13 @@ namespace dso
 		EFFrame* efFrame;
 
 		// constant info & pre-calculated values
-		//DepthImageWrap* frame;
 		FrameShell* shell;
 
 		Eigen::Vector3f* dI;				 // trace, fine tracking. Used for direction select (not for gradient histograms etc.)
 		Eigen::Vector3f* dIp[PYR_LEVELS];	 // coarse tracking / coarse initializer. NAN in [0] only.
-		float* absSquaredGrad[PYR_LEVELS];  // only used for pixel select (histograms etc.). no NAN.
+		float* absSquaredGrad[PYR_LEVELS];	 // only used for pixel select (histograms etc.). no NAN.
 
-		int frameID;						// incremental ID for keyframes only!
+		int frameID;						 // incremental ID for keyframes only!
 		static int instanceCounter;
 		int idx;
 
@@ -120,8 +118,8 @@ namespace dso
 
 		std::vector<PointHessian*> pointHessians;				// contains all ACTIVE points.
 		std::vector<PointHessian*> pointHessiansMarginalized;	// contains all MARGINALIZED points (= fully marginalized, usually because point went OOB.)
-		std::vector<PointHessian*> pointHessiansOut;		// contains all OUTLIER points (= discarded.).
-		std::vector<ImmaturePoint*> immaturePoints;		// contains all OUTLIER points (= discarded.).
+		std::vector<PointHessian*> pointHessiansOut;			// contains all OUTLIER points (= discarded.).
+		std::vector<ImmaturePoint*> immaturePoints;				// contains all OUTLIER points (= discarded.).
 
 		Mat66 nullspaces_pose;
 		Mat42 nullspaces_affine;

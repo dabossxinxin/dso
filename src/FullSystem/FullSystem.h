@@ -215,6 +215,7 @@ namespace dso
 		void printLogLine();
 		void printEvalLine();
 		void printEigenValLine();
+
 		std::ofstream* calibLog;
 		std::ofstream* numsLog;
 		std::ofstream* errorsLog;
@@ -224,7 +225,6 @@ namespace dso
 		std::ofstream* DiagonalLog;
 		std::ofstream* variancesLog;
 		std::ofstream* nullspacesLog;
-
 		std::ofstream* coarseTrackingLog;
 
 		// statistics
@@ -238,7 +238,7 @@ namespace dso
 		long int statistics_numMargResBwd;
 		float statistics_lastFineTrackRMSE;
 
-		// =================== changed by tracker-thread. protected by trackMutex ============
+		// 这些成员变量与跟踪线程相关并使用trackMutex互斥锁保护数据
 		boost::mutex trackMutex;
 		std::vector<FrameShell*> allFrameHistory;
 		CoarseInitializer* coarseInitializer;
@@ -251,9 +251,10 @@ namespace dso
 		EnergyFunctional* ef;
 		IndexThreadReduce<Vec10> treadReduce;
 
+		// 这些成员变量与特征点选择相关选择梯度明显分布均匀的特征
 		float* selectionMap;
-		PixelSelector* pixelSelector;
-		CoarseDistanceMap* coarseDistanceMap;
+		PixelSelector* pixelSelector;			// 特征选择handle
+		CoarseDistanceMap* coarseDistanceMap;	// 为均匀化特征构造的map
 
 		std::vector<FrameHessian*> frameHessians;	// ONLY changed in marginalizeFrame and addFrame.
 		std::vector<PointFrameResidual*> activeResiduals;
@@ -271,10 +272,8 @@ namespace dso
 		// mutex for camToWorl's in shells (these are always in a good configuration).
 		boost::mutex shellPoseMutex;
 
-		/*
-		 * tracking always uses the newest KF as reference.
-		 */
-		void makeKeyFrame(FrameHessian* fh);
+		// DSO跟踪时总是使用最新关键帧作为参考关键帧
+		void makeKeyFrame(FrameHessian* fh);						// 
 		void makeNonKeyFrame(FrameHessian* fh);
 		void deliverTrackedFrame(FrameHessian* fh, bool needKF);
 		void mappingLoop();

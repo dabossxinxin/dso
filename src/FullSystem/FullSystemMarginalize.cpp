@@ -179,7 +179,7 @@ namespace dso
 
 		{
 			std::vector<FrameHessian*> v;
-			v.push_back(frame);
+			v.emplace_back(frame);
 			for (IOWrap::Output3DWrapper* ow : outputWrapper)
 				ow->publishKeyframes(v, true, &Hcalib);
 		}

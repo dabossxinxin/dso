@@ -385,7 +385,7 @@ namespace dso
 	{
 		EFResidual* efr = new EFResidual(r, r->point->efPoint, r->host->efFrame, r->target->efFrame);
 		efr->idxInAll = r->point->efPoint->residualsAll.size();
-		r->point->efPoint->residualsAll.push_back(efr);
+		r->point->efPoint->residualsAll.emplace_back(efr);
 
 		connectivityMap[(((uint64_t)efr->host->frameID) << 32) + ((uint64_t)efr->target->frameID)][0]++;
 
@@ -398,7 +398,7 @@ namespace dso
 	{
 		EFFrame* eff = new EFFrame(fh);
 		eff->idx = frames.size();
-		frames.push_back(eff);
+		frames.emplace_back(eff);
 
 		nFrames++;
 		fh->efFrame = eff;
@@ -431,7 +431,7 @@ namespace dso
 	{
 		EFPoint* efp = new EFPoint(ph, ph->host->efFrame);
 		efp->idxInPoints = ph->host->efFrame->points.size();
-		ph->host->efFrame->points.push_back(efp);
+		ph->host->efFrame->points.emplace_back(efp);
 
 		nPoints++;
 		ph->efPoint = efp;
@@ -582,7 +582,7 @@ namespace dso
 					for (EFResidual* r : p->residualsAll)
 						if (r->isActive())
 							connectivityMap[(((uint64_t)r->host->frameID) << 32) + ((uint64_t)r->target->frameID)][1]++;
-					allPointsToMarg.push_back(p);
+					allPointsToMarg.emplace_back(p);
 				}
 			}
 		}
@@ -830,7 +830,7 @@ namespace dso
 		{
 			for (EFPoint* p : f->points)
 			{
-				allPoints.push_back(p);
+				allPoints.emplace_back(p);
 				for (EFResidual* r : p->residualsAll)
 				{
 					r->hostIDX = r->host->idx;

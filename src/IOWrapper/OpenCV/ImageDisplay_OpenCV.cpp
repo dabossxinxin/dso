@@ -142,7 +142,7 @@ void displayImageStitch(const char* windowName, const std::vector<MinimalImageB*
 {
 	std::vector<cv::Mat*> imagesCV;
     for(size_t i=0; i < images.size();i++)
-		imagesCV.push_back(new cv::Mat(images[i]->h, images[i]->w, CV_8U, images[i]->data));
+		imagesCV.emplace_back(new cv::Mat(images[i]->h, images[i]->w, CV_8U, images[i]->data));
 	displayImageStitch(windowName, imagesCV, cc, rc);
     for(size_t i=0; i < images.size();i++)
 		delete imagesCV[i];
@@ -151,7 +151,7 @@ void displayImageStitch(const char* windowName, const std::vector<MinimalImageB3
 {
 	std::vector<cv::Mat*> imagesCV;
     for(size_t i=0; i < images.size();i++)
-		imagesCV.push_back(new cv::Mat(images[i]->h, images[i]->w, CV_8UC3, images[i]->data));
+		imagesCV.emplace_back(new cv::Mat(images[i]->h, images[i]->w, CV_8UC3, images[i]->data));
 	displayImageStitch(windowName, imagesCV, cc, rc);
     for(size_t i=0; i < images.size();i++)
 		delete imagesCV[i];
@@ -160,7 +160,7 @@ void displayImageStitch(const char* windowName, const std::vector<MinimalImageF*
 {
 	std::vector<cv::Mat*> imagesCV;
     for(size_t i=0; i < images.size();i++)
-		imagesCV.push_back(new cv::Mat(images[i]->h, images[i]->w, CV_32F, images[i]->data));
+		imagesCV.emplace_back(new cv::Mat(images[i]->h, images[i]->w, CV_32F, images[i]->data));
 	displayImageStitch(windowName, imagesCV, cc, rc);
     for(size_t i=0; i < images.size();i++)
 		delete imagesCV[i];
@@ -169,7 +169,7 @@ void displayImageStitch(const char* windowName, const std::vector<MinimalImageF3
 {
 	std::vector<cv::Mat*> imagesCV;
     for(size_t i=0; i < images.size();i++)
-		imagesCV.push_back(new cv::Mat(images[i]->h, images[i]->w, CV_32FC3, images[i]->data));
+		imagesCV.emplace_back(new cv::Mat(images[i]->h, images[i]->w, CV_32FC3, images[i]->data));
 	displayImageStitch(windowName, imagesCV, cc, rc);
     for(size_t i=0; i < images.size();i++)
 		delete imagesCV[i];

@@ -174,7 +174,7 @@ namespace dso
 				r->state_NewEnergy = r->state_energy = 0;
 				r->state_NewState = ResState::OUTLIER;
 				r->setState(ResState::INLIER);
-				p->residuals.push_back(r);
+				p->residuals.emplace_back(r);
 
 				if (r->target == frameHessians.back())
 				{

@@ -20,15 +20,7 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
-
 #include <stdio.h>
-
-//#include <GL/glx.h>
-//#include <GL/gl.h>
-//#include <GL/glu.h>
-
 #include <pangolin/pangolin.h>
 #include "KeyFrameDisplay.h"
 #include "FullSystem/HessianBlocks.h"

@@ -481,7 +481,7 @@ namespace dso
 				{
 					KeyFrameDisplay* kfd = new KeyFrameDisplay();
 					keyframesByKFID[fh->frameID] = kfd;
-					keyframes.push_back(kfd);
+					keyframes.emplace_back(kfd);
 				}
 				keyframesByKFID[fh->frameID]->setFromKF(fh, HCalib);
 			}
@@ -496,14 +496,14 @@ namespace dso
 			boost::unique_lock<boost::mutex> lk(model3DMutex);
 			struct timeval time_now;
 			gettimeofday(&time_now, NULL);
-			lastNTrackingMs.push_back(((time_now.tv_sec - last_track.tv_sec)*1000.0f + (time_now.tv_usec - last_track.tv_usec) / 1000.0f));
+			lastNTrackingMs.emplace_back(((time_now.tv_sec - last_track.tv_sec)*1000.0f + (time_now.tv_usec - last_track.tv_usec) / 1000.0f));
 			if (lastNTrackingMs.size() > 10) lastNTrackingMs.pop_front();
 			last_track = time_now;
 
 			if (!setting_render_display3D) return;
 
 			currentCam->setFromF(frame, HCalib);
-			allFramePoses.push_back(frame->camToWorld.translation().cast<float>());
+			allFramePoses.emplace_back(frame->camToWorld.translation().cast<float>());
 		}
 
 		void PangolinDSOViewer::pushLiveFrame(FrameHessian* image)
@@ -536,7 +536,7 @@ namespace dso
 
 			struct timeval time_now;
 			gettimeofday(&time_now, NULL);
-			lastNMappingMs.push_back(((time_now.tv_sec - last_map.tv_sec)*1000.0f + (time_now.tv_usec - last_map.tv_usec) / 1000.0f));
+			lastNMappingMs.emplace_back(((time_now.tv_sec - last_map.tv_sec)*1000.0f + (time_now.tv_usec - last_map.tv_usec) / 1000.0f));
 			if (lastNMappingMs.size() > 10) lastNMappingMs.pop_front();
 			last_map = time_now;
 

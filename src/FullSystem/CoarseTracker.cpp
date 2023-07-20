@@ -47,7 +47,7 @@ namespace dso
 	{
 		const int padT = 1 + ((1 << b) / sizeof(T));
 		T* ptr = new T[size + padT];
-		rawPtrVec.push_back(ptr);
+		rawPtrVec.emplace_back(ptr);
 		T* alignedPtr = (T*)((((uintptr_t)(ptr + padT)) >> b) << b);
 		return alignedPtr;
 	}
@@ -708,7 +708,7 @@ namespace dso
 			for (int i = 0; i < h[lvl] * w[lvl]; i++)
 			{
 				if (idepth[lvl][i] > 0)
-					allID.push_back(idepth[lvl][i]);
+					allID.emplace_back(idepth[lvl][i]);
 			}
 			std::sort(allID.begin(), allID.end());
 			int n = allID.size() - 1;

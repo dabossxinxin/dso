@@ -266,7 +266,7 @@ namespace dso
 		{
 			for (unsigned int i = 0; i < lastF_2_fh_tries.size(); i++)
 			{
-				lastF_2_fh_tries.push_back(SE3());
+				lastF_2_fh_tries.emplace_back(SE3());
 			}
 		}
 		else
@@ -589,7 +589,7 @@ namespace dso
 					if (dist >= currentMinActDist * ph->my_type)
 					{
 						coarseDistanceMap->addIntoDistFinal(u, v);
-						toOptimize.push_back(ph);
+						toOptimize.emplace_back(ph);
 					}
 				}
 				else
@@ -621,7 +621,7 @@ namespace dso
 			if (newpoint != 0 && newpoint != (PointHessian*)((long)(-1)))
 			{
 				newpoint->host->immaturePoints[ph->idxInImmaturePoints] = 0;
-				newpoint->host->pointHessians.push_back(newpoint);
+				newpoint->host->pointHessians.emplace_back(newpoint);
 				ef->insertPoint(newpoint);
 				for (PointFrameResidual* r : newpoint->residuals)
 					ef->insertResidual(r);
@@ -670,10 +670,10 @@ namespace dso
 		//if(setting_margPointVisWindow>0)
 		{
 			for (int i = ((int)frameHessians.size()) - 1; i >= 0 && i >= ((int)frameHessians.size()); i--)
-				if (!frameHessians[i]->flaggedForMarginalization) fhsToKeepPoints.push_back(frameHessians[i]);
+				if (!frameHessians[i]->flaggedForMarginalization) fhsToKeepPoints.emplace_back(frameHessians[i]);
 
 			for (int i = 0; i < (int)frameHessians.size(); i++)
-				if (frameHessians[i]->flaggedForMarginalization) fhsToMargPoints.push_back(frameHessians[i]);
+				if (frameHessians[i]->flaggedForMarginalization) fhsToMargPoints.emplace_back(frameHessians[i]);
 		}
 
 		//ef->setAdjointsF();
@@ -689,7 +689,7 @@ namespace dso
 
 				if (ph->idepth_scaled < 0 || ph->residuals.size() == 0)
 				{
-					host->pointHessiansOut.push_back(ph);
+					host->pointHessiansOut.emplace_back(ph);
 					ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
 					host->pointHessians[i] = 0;
 					flag_nores++;
@@ -717,17 +717,17 @@ namespace dso
 						{
 							flag_inin++;
 							ph->efPoint->stateFlag = EFPointStatus::PS_MARGINALIZE;
-							host->pointHessiansMarginalized.push_back(ph);
+							host->pointHessiansMarginalized.emplace_back(ph);
 						}
 						else
 						{
 							ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
-							host->pointHessiansOut.push_back(ph);
+							host->pointHessiansOut.emplace_back(ph);
 						}
 					}
 					else
 					{
-						host->pointHessiansOut.push_back(ph);
+						host->pointHessiansOut.emplace_back(ph);
 						ph->efPoint->stateFlag = EFPointStatus::PS_DROP;
 
 						//printf("drop point in frame %d (%d goodRes, %d activeRes)\n", ph->host->idx, ph->numGoodResiduals, (int)ph->residuals.size());
@@ -763,7 +763,7 @@ namespace dso
 		shell->timestamp = image->timestamp;
 		shell->incoming_id = id;
 		fh->shell = shell;
-		allFrameHistory.push_back(shell);
+		allFrameHistory.emplace_back(shell);
 
 		// =========================== make Images / derivatives etc. =========================
 		fh->ab_exposure = image->exposure_time;
@@ -871,7 +871,7 @@ namespace dso
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(trackMapSyncMutex);
-			unmappedTrackedFrames.push_back(fh);
+			unmappedTrackedFrames.emplace_back(fh);
 			if (needKF) needNewKFAfter = fh->shell->trackingRef->id;
 			trackedFrameSignal.notify_all();
 
@@ -998,9 +998,9 @@ namespace dso
 
 		// =========================== add New Frame to Hessian Struct. =========================
 		fh->idx = frameHessians.size();
-		frameHessians.push_back(fh);
+		frameHessians.emplace_back(fh);
 		fh->frameID = allKeyFramesHistory.size();
-		allKeyFramesHistory.push_back(fh->shell);
+		allKeyFramesHistory.emplace_back(fh->shell);
 		ef->insertFrame(fh, &Hcalib);
 
 		setPrecalcValues();
@@ -1014,7 +1014,7 @@ namespace dso
 			{
 				PointFrameResidual* r = new PointFrameResidual(ph, fh1, fh);
 				r->setState(ResState::INLIER);
-				ph->residuals.push_back(r);
+				ph->residuals.emplace_back(r);
 				ef->insertResidual(r);
 				ph->lastResiduals[1] = ph->lastResiduals[0];
 				ph->lastResiduals[0] = std::pair<PointFrameResidual*, ResState>(r, ResState::INLIER);
@@ -1104,9 +1104,9 @@ namespace dso
 		// add firstframe.
 		FrameHessian* firstFrame = coarseInitializer->firstFrame;
 		firstFrame->idx = frameHessians.size();
-		frameHessians.push_back(firstFrame);
+		frameHessians.emplace_back(firstFrame);
 		firstFrame->frameID = allKeyFramesHistory.size();
-		allKeyFramesHistory.push_back(firstFrame->shell);
+		allKeyFramesHistory.emplace_back(firstFrame->shell);
 		ef->insertFrame(firstFrame, &Hcalib);
 		setPrecalcValues();
 
@@ -1151,7 +1151,7 @@ namespace dso
 			ph->hasDepthPrior = true;
 			ph->setPointStatus(PointHessian::ACTIVE);
 
-			firstFrame->pointHessians.push_back(ph);
+			firstFrame->pointHessians.emplace_back(ph);
 			ef->insertPoint(ph);
 		}
 
@@ -1197,7 +1197,7 @@ namespace dso
 
 				ImmaturePoint* impt = new ImmaturePoint(x, y, newFrame, selectionMap[i], &Hcalib);
 				if (!std::isfinite(impt->energyTH)) delete impt;
-				else newFrame->immaturePoints.push_back(impt);
+				else newFrame->immaturePoints.emplace_back(impt);
 
 			}
 		//printf("MADE %d IMMATURE POINTS!\n", (int)newFrame->immaturePoints.size());

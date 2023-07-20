@@ -67,7 +67,7 @@ namespace dso
 			for(FrameHessian* f2 : frameHessians)
 			{
 				MinimalImageB3* debugImage=f2->debugImage;
-				images.push_back(debugImage);
+				images.emplace_back(debugImage);
 
 				Eigen::Vector3f* fd = f2->dI;
 
@@ -122,13 +122,13 @@ namespace dso
 			for(unsigned int f=0;f<frameHessians.size();f++)
 			{
 				for(PointHessian* ph : frameHessians[f]->pointHessians)
-					if(ph!=0) allID.push_back(ph->idepth_scaled);
+					if(ph!=0) allID.emplace_back(ph->idepth_scaled);
 
 				for(PointHessian* ph : frameHessians[f]->pointHessiansMarginalized)
-					if(ph!=0) allID.push_back(ph->idepth_scaled);
+					if(ph!=0) allID.emplace_back(ph->idepth_scaled);
 
 				for(PointHessian* ph : frameHessians[f]->pointHessiansOut)
-					if(ph!=0) allID.push_back(ph->idepth_scaled);
+					if(ph!=0) allID.emplace_back(ph->idepth_scaled);
 			}
 			std::sort(allID.begin(), allID.end());
 			int n = allID.size()-1;
@@ -172,7 +172,7 @@ namespace dso
 		for(unsigned int f=0;f<frameHessians.size();f++)
 		{
 			MinimalImageB3* img = new MinimalImageB3(wG[0],hG[0]);
-			images.push_back(img);
+			images.emplace_back(img);
 			//float* fd = frameHessians[f]->I;
 			Eigen::Vector3f* fd = frameHessians[f]->dI;
 
