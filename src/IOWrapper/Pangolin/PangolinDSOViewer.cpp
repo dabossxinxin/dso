@@ -20,9 +20,6 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
-
 #include "PangolinDSOViewer.h"
 #include "KeyFrameDisplay.h"
 #include "util/globalCalib.h"
@@ -58,7 +55,6 @@ namespace dso
 			}
 
 			needReset = false;
-
 
 			if (startRunThread)
 				runThread = boost::thread(&PangolinDSOViewer::run, this);
@@ -113,7 +109,8 @@ namespace dso
 			// parameter reconfigure gui
 			pangolin::CreatePanel("ui").SetBounds(0.0, 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
 
-			pangolin::Var<int> settings_pointCloudMode("ui.PC_mode", 1, 1, 4, false);
+			pangolin::Var<int> settings_pointCloudMode("ui.PC_mode", 0, 0, 3, false);
+			pangolin::Var<int> settings_pointCloudSize("ui.PC_size", 1, 1, 8, false);
 			pangolin::Var<bool> settings_showKFCameras("ui.KFCam", false, true);
 			pangolin::Var<bool> settings_showCurrentCamera("ui.CurrCam", true, true);
 			pangolin::Var<bool> settings_showTrajectory("ui.Trajectory", true, true);
@@ -159,15 +156,19 @@ namespace dso
 					Visualization3D_display.Activate(Visualization3D_camera);
 					boost::unique_lock<boost::mutex> lk3d(model3DMutex);
 					//pangolin::glDrawColouredCube();
+					
+					// 绘制系统中所有关键帧的位姿以及地图点
 					int refreshed = 0;
 					for (KeyFrameDisplay* fh : keyframes)
 					{
+						// 绘制关键帧的位姿为蓝色
 						float blue[3] = { 0,0,1 };
 						if (this->settings_showKFCameras) fh->drawCam(1, blue, 0.1);
 
+						// 取出满足函数设定条件的地图点
 						refreshed += (int)(fh->refreshPC(refreshed < 10, this->settings_scaledVarTH, this->settings_absVarTH,
 							this->settings_pointCloudMode, this->settings_minRelBS, this->settings_sparsity));
-						fh->drawPC(1);
+						fh->drawPC(this->settings_pointCloudSize);
 					}
 					if (this->settings_showCurrentCamera) currentCam->drawCam(2, 0, 0.2);
 					drawConstraints();
@@ -220,6 +221,7 @@ namespace dso
 
 				// update parameters
 				this->settings_pointCloudMode = settings_pointCloudMode.Get();
+				this->settings_pointCloudSize = settings_pointCloudSize.Get();
 
 				this->settings_showActiveConstraints = settings_showActiveConstraints.Get();
 				this->settings_showAllConstraints = settings_showAllConstraints.Get();
@@ -237,7 +239,6 @@ namespace dso
 				setting_render_plotTrackingFull = settings_showFullTracking.Get();
 				setting_render_displayCoarseTrackingFull = settings_showCoarseTracking.Get();
 
-
 				this->settings_absVarTH = settings_absVarTH.Get();
 				this->settings_scaledVarTH = settings_scaledVarTH.Get();
 				this->settings_minRelBS = settings_minRelBS.Get();
@@ -253,6 +254,9 @@ namespace dso
 				{
 					printf("RESET!\n");
 					settings_resetButton.Reset();
+
+					// reset状态触发后显示器需要重置算法模块也需要重置
+					// 因此需要给出一个全局变量让外部算法模块感知到重置命令
 					setting_fullResetRequested = true;
 				}
 
@@ -260,11 +264,12 @@ namespace dso
 				{
 					printf("SavePointCloud!\n");
 					settings_saveButton.Reset();
-					setting_fullSaveRequested = true;
+					save_internal();
 				}
 
 				// Swap frames and Process Events
 				pangolin::FinishFrame();
+
 				if (needReset) reset_internal();
 			}
 
@@ -289,18 +294,31 @@ namespace dso
 		{
 			needReset = true;
 		}
-
-		void PangolinDSOViewer::save()
-		{
-			needSave = true;
-		}
 		
 		void PangolinDSOViewer::save_internal()
 		{
 			std::string filename = "./DSOMAP.txt";
-			std::ofstream fout(filename.c_str(), std::ios::app);
+			std::ofstream fout(filename.c_str());
 
-			needSave = false;
+			int status = 0;
+			int processNum = 0;
+			char bar[102] = { 0 };
+			const char symbol[4] = { '|','/','-','\\' };
+			const int keyframesNum = keyframes.size();
+
+			model3DMutex.lock();
+			for (KeyFrameDisplay* fh : keyframes)
+			{
+				fh->savePC(fout);
+
+				processNum++;
+				status = (int)(((float)processNum / keyframesNum) * 100);
+				memset(bar, '#', sizeof(char)*status);
+				printf("[%s][%d%%][%c]\r", bar, status, symbol[status % 4]);
+				fflush(stdout);
+			}
+			printf("\n");
+			model3DMutex.unlock();
 		}
 
 		void PangolinDSOViewer::reset_internal()

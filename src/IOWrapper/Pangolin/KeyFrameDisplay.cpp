@@ -80,6 +80,7 @@ namespace dso
 
 		void KeyFrameDisplay::setFromKF(FrameHessian* fh, CalibHessian* HCalib)
 		{
+			// 设置当前关键帧的位姿以及内参数
 			setFromF(fh->shell, HCalib);
 
 			// add all traces, inlier and outlier points.
@@ -95,20 +96,20 @@ namespace dso
 				originalInputSparse = new InputPointSparse<MAX_RES_PER_POINT>[numSparseBufferSize];
 			}
 
-			InputPointSparse<MAX_RES_PER_POINT>* pc = originalInputSparse;
 			numSparsePoints = 0;
+			InputPointSparse<MAX_RES_PER_POINT>* pc = originalInputSparse;
+
 			for (ImmaturePoint* p : fh->immaturePoints)
 			{
 				for (int i = 0; i < patternNum; i++)
 					pc[numSparsePoints].color[i] = p->color[i];
-
 				pc[numSparsePoints].u = p->u;
 				pc[numSparsePoints].v = p->v;
 				pc[numSparsePoints].idpeth = (p->idepth_max + p->idepth_min)*0.5f;
 				pc[numSparsePoints].idepth_hessian = 1000;
 				pc[numSparsePoints].relObsBaseline = 0;
 				pc[numSparsePoints].numGoodRes = 1;
-				pc[numSparsePoints].status = 0;
+				pc[numSparsePoints].status = InputPointStatus::Immature;
 				numSparsePoints++;
 			}
 
@@ -122,8 +123,7 @@ namespace dso
 				pc[numSparsePoints].relObsBaseline = p->maxRelBaseline;
 				pc[numSparsePoints].idepth_hessian = p->idepth_hessian;
 				pc[numSparsePoints].numGoodRes = 0;
-				pc[numSparsePoints].status = 1;
-
+				pc[numSparsePoints].status = InputPointStatus::OK;
 				numSparsePoints++;
 			}
 
@@ -137,7 +137,7 @@ namespace dso
 				pc[numSparsePoints].relObsBaseline = p->maxRelBaseline;
 				pc[numSparsePoints].idepth_hessian = p->idepth_hessian;
 				pc[numSparsePoints].numGoodRes = 0;
-				pc[numSparsePoints].status = 2;
+				pc[numSparsePoints].status = InputPointStatus::Marginalized;
 				numSparsePoints++;
 			}
 
@@ -151,7 +151,7 @@ namespace dso
 				pc[numSparsePoints].relObsBaseline = p->maxRelBaseline;
 				pc[numSparsePoints].idepth_hessian = p->idepth_hessian;
 				pc[numSparsePoints].numGoodRes = 0;
-				pc[numSparsePoints].status = 3;
+				pc[numSparsePoints].status = InputPointStatus::Out;
 				numSparsePoints++;
 			}
 			assert(numSparsePoints <= npoints);
@@ -160,13 +160,19 @@ namespace dso
 			needRefresh = true;
 		}
 
-
 		KeyFrameDisplay::~KeyFrameDisplay()
 		{
 			if (originalInputSparse != 0)
 				delete[] originalInputSparse;
 		}
 
+		// 刷新关键帧对应的点云
+		// canRefresh:
+		// scaledTH:
+		// absTH:
+		// mode:
+		// minBS:
+		// sparsity:
 		bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, int mode, float minBS, int sparsity)
 		{
 			if (canRefresh)
@@ -188,14 +194,18 @@ namespace dso
 			my_minRelBS = minBS;
 			my_sparsifyFactor = sparsity;
 
-			// if there are no vertices, done!
+			// 关键帧中并没有地图点此时不显示
 			if (numSparsePoints == 0)
 				return false;
 
 			// make data
-			Vec3f* tmpVertexBuffer = new Vec3f[numSparsePoints*patternNum];
-			Vec3b* tmpColorBuffer = new Vec3b[numSparsePoints*patternNum];
+			Vec3f* tmpVertexBufferGlobal = new Vec3f[numSparsePoints*patternNum];
+			Vec3b* tmpColorBufferGlobal = new Vec3b[numSparsePoints*patternNum];
 			int vertexBufferNumPoints = 0;
+
+			Vec3f landmarkLocal;
+			Vec4f landmarkLocalHomo;
+			Eigen::Matrix<float, 3, 4> m = camToWorld.matrix3x4().cast<float>();
 
 			for (int i = 0; i < numSparsePoints; i++)
 			{
@@ -205,7 +215,6 @@ namespace dso
 				 * my_displayMode==2 - active only
 				 * my_displayMode==3 - nothing
 				 */
-
 				if (my_displayMode == 1 && originalInputSparse[i].status != 1 && originalInputSparse[i].status != 2) continue;
 				if (my_displayMode == 2 && originalInputSparse[i].status != 1) continue;
 				if (my_displayMode > 2) continue;
@@ -216,12 +225,16 @@ namespace dso
 				float depth4 = depth * depth; depth4 *= depth4;
 				float var = (1.0f / (originalInputSparse[i].idepth_hessian + 0.01));
 
+				// TODO:数据乘以方差表示什么涵义
 				if (var * depth4 > my_scaledTH)
 					continue;
 
+				// 当前点的方差较大表示点不可信
 				if (var > my_absTH)
 					continue;
 
+				// 观测到该点的两帧间的基线如果比较短
+				// 那么由这两帧得到的路标点的位置误差是比较大的
 				if (originalInputSparse[i].relObsBaseline < my_minRelBS)
 					continue;
 
@@ -231,48 +244,52 @@ namespace dso
 					int dx = patternP[pnt][0];
 					int dy = patternP[pnt][1];
 
-					tmpVertexBuffer[vertexBufferNumPoints][0] = ((originalInputSparse[i].u + dx)*fxi + cxi) * depth;
-					tmpVertexBuffer[vertexBufferNumPoints][1] = ((originalInputSparse[i].v + dy)*fyi + cyi) * depth;
-					tmpVertexBuffer[vertexBufferNumPoints][2] = depth * (1 + 2 * fxi * (rand() / (float)RAND_MAX - 0.5f));
+					landmarkLocal[0] = ((originalInputSparse[i].u + dx)*fxi + cxi) * depth;
+					landmarkLocal[1] = ((originalInputSparse[i].v + dy)*fyi + cyi) * depth;
+					landmarkLocal[2] = depth /** (1 + 2 * fxi * (rand() / (float)RAND_MAX - 0.5f))*/;
 
+					landmarkLocalHomo = Vec4f::Ones();
+					landmarkLocalHomo.block<3, 1>(0, 0) = landmarkLocal;
+					tmpVertexBufferGlobal[vertexBufferNumPoints] = m * landmarkLocalHomo;
+					
 					if (my_displayMode == 0)
 					{
-						if (originalInputSparse[i].status == 0)
+						if (originalInputSparse[i].status == InputPointStatus::Immature)
 						{
-							tmpColorBuffer[vertexBufferNumPoints][0] = 0;
-							tmpColorBuffer[vertexBufferNumPoints][1] = 255;
-							tmpColorBuffer[vertexBufferNumPoints][2] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][0] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][1] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][2] = 255;
 						}
-						else if (originalInputSparse[i].status == 1)
+						else if (originalInputSparse[i].status == InputPointStatus::OK)
 						{
-							tmpColorBuffer[vertexBufferNumPoints][0] = 0;
-							tmpColorBuffer[vertexBufferNumPoints][1] = 255;
-							tmpColorBuffer[vertexBufferNumPoints][2] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][0] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][1] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][2] = 0;
 						}
-						else if (originalInputSparse[i].status == 2)
+						else if (originalInputSparse[i].status == InputPointStatus::Marginalized)
 						{
-							tmpColorBuffer[vertexBufferNumPoints][0] = 0;
-							tmpColorBuffer[vertexBufferNumPoints][1] = 0;
-							tmpColorBuffer[vertexBufferNumPoints][2] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][0] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][1] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][2] = 255;
 						}
-						else if (originalInputSparse[i].status == 3)
+						else if (originalInputSparse[i].status == InputPointStatus::Out)
 						{
-							tmpColorBuffer[vertexBufferNumPoints][0] = 255;
-							tmpColorBuffer[vertexBufferNumPoints][1] = 0;
-							tmpColorBuffer[vertexBufferNumPoints][2] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][0] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][1] = 0;
+							tmpColorBufferGlobal[vertexBufferNumPoints][2] = 0;
 						}
 						else
 						{
-							tmpColorBuffer[vertexBufferNumPoints][0] = 255;
-							tmpColorBuffer[vertexBufferNumPoints][1] = 255;
-							tmpColorBuffer[vertexBufferNumPoints][2] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][0] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][1] = 255;
+							tmpColorBufferGlobal[vertexBufferNumPoints][2] = 255;
 						}
 					}
 					else
 					{
-						tmpColorBuffer[vertexBufferNumPoints][0] = originalInputSparse[i].color[pnt];
-						tmpColorBuffer[vertexBufferNumPoints][1] = originalInputSparse[i].color[pnt];
-						tmpColorBuffer[vertexBufferNumPoints][2] = originalInputSparse[i].color[pnt];
+						tmpColorBufferGlobal[vertexBufferNumPoints][0] = originalInputSparse[i].color[pnt];
+						tmpColorBufferGlobal[vertexBufferNumPoints][1] = originalInputSparse[i].color[pnt];
+						tmpColorBufferGlobal[vertexBufferNumPoints][2] = originalInputSparse[i].color[pnt];
 					}
 					vertexBufferNumPoints++;
 					assert(vertexBufferNumPoints <= numSparsePoints * patternNum);
@@ -281,10 +298,10 @@ namespace dso
 
 			if (vertexBufferNumPoints == 0)
 			{
-				delete[] tmpColorBuffer;
-				tmpColorBuffer = NULL;
-				delete[] tmpVertexBuffer;
-				tmpVertexBuffer = NULL;
+				delete[] tmpColorBufferGlobal;
+				tmpColorBufferGlobal = NULL;
+				delete[] tmpVertexBufferGlobal;
+				tmpVertexBufferGlobal = NULL;
 
 				return true;
 			}
@@ -293,17 +310,17 @@ namespace dso
 			if (numGLBufferGoodPoints > numGLBufferPoints)
 			{
 				numGLBufferPoints = vertexBufferNumPoints * 1.3;
-				vertexBuffer.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_FLOAT, 3, GL_DYNAMIC_DRAW);
-				colorBuffer.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_UNSIGNED_BYTE, 3, GL_DYNAMIC_DRAW);
+				vertexBufferGlobal.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_FLOAT, 3, GL_DYNAMIC_DRAW);
+				colorBufferGlobal.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_UNSIGNED_BYTE, 3, GL_DYNAMIC_DRAW);
 			}
-			vertexBuffer.Upload(tmpVertexBuffer, sizeof(float) * 3 * numGLBufferGoodPoints, 0);
-			colorBuffer.Upload(tmpColorBuffer, sizeof(unsigned char) * 3 * numGLBufferGoodPoints, 0);
+			vertexBufferGlobal.Upload(tmpVertexBufferGlobal, sizeof(float) * 3 * numGLBufferGoodPoints, 0);
+			colorBufferGlobal.Upload(tmpColorBufferGlobal, sizeof(unsigned char) * 3 * numGLBufferGoodPoints, 0);
 			bufferValid = true;
 
-			delete[] tmpColorBuffer;
-			tmpColorBuffer = NULL;
-			delete[] tmpVertexBuffer;
-			tmpVertexBuffer = NULL;
+			delete[] tmpColorBufferGlobal;
+			tmpColorBufferGlobal = NULL;
+			delete[] tmpVertexBufferGlobal;
+			tmpVertexBufferGlobal = NULL;
 
 			return true;
 		}
@@ -360,29 +377,56 @@ namespace dso
 				return;
 
 			glDisable(GL_LIGHTING);
-
-			glPushMatrix();
-
-			Sophus::Matrix4f m = camToWorld.matrix().cast<float>();
-			glMultMatrixf((GLfloat*)m.data());
-
 			glPointSize(pointSize);
 
-			colorBuffer.Bind();
-			glColorPointer(colorBuffer.count_per_element, colorBuffer.datatype, 0, 0);
+			colorBufferGlobal.Bind();
+			glColorPointer(colorBufferGlobal.count_per_element, colorBufferGlobal.datatype, 0, 0);
 			glEnableClientState(GL_COLOR_ARRAY);
 
-			vertexBuffer.Bind();
-			glVertexPointer(vertexBuffer.count_per_element, vertexBuffer.datatype, 0, 0);
+			vertexBufferGlobal.Bind();
+			glVertexPointer(vertexBufferGlobal.count_per_element, vertexBufferGlobal.datatype, 0, 0);
 			glEnableClientState(GL_VERTEX_ARRAY);
+
 			glDrawArrays(GL_POINTS, 0, numGLBufferGoodPoints);
+
 			glDisableClientState(GL_VERTEX_ARRAY);
-			vertexBuffer.Unbind();
-
+			vertexBufferGlobal.Unbind();
 			glDisableClientState(GL_COLOR_ARRAY);
-			colorBuffer.Unbind();
+			colorBufferGlobal.Unbind();
+		}
 
-			glPopMatrix();
+		void KeyFrameDisplay::savePC(std::ostream& out)
+		{
+			if (!bufferValid || numGLBufferGoodPoints == 0)
+				return;
+			
+			float* vertexBuffer = new float[numGLBufferGoodPoints * 3];
+			unsigned char* colorBuffer = new unsigned char[numGLBufferGoodPoints * 3];
+
+			vertexBufferGlobal.Download(vertexBuffer, sizeof(float)*numGLBufferGoodPoints * 3, 0);
+			colorBufferGlobal.Download(colorBuffer, sizeof(unsigned char)*numGLBufferGoodPoints * 3, 0);
+
+			for (int it = 0; it < numGLBufferGoodPoints; ++it)
+			{
+				out << vertexBuffer[it * 3 + 0] << " "
+					<< vertexBuffer[it * 3 + 1] << " "
+					<< vertexBuffer[it * 3 + 2] << " "
+					<< (int)colorBuffer[it * 3 + 0] << " "
+					<< (int)colorBuffer[it * 3 + 1] << " "
+					<< (int)colorBuffer[it * 3 + 2] << std::endl;
+			}
+
+			if (vertexBuffer)
+			{
+				delete[] vertexBuffer;
+				vertexBuffer = NULL;
+			}
+
+			if (colorBuffer)
+			{
+				delete[] colorBuffer;
+				colorBuffer = NULL;
+			}
 		}
 	}
 }

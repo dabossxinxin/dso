@@ -38,6 +38,15 @@ namespace dso
 
 	namespace IOWrap
 	{
+		enum InputPointStatus
+		{
+			Immature = 0,
+			OK,
+			Marginalized,
+			Out
+		};
+		
+		// 记录关键帧的地图点信息
 		template<int ppp>
 		struct InputPointSparse
 		{
@@ -80,6 +89,7 @@ namespace dso
 			// renders cam & pointcloud.
 			void drawCam(float lineWidth = 1, float* color = 0, float sizeFactor = 1);
 			void drawPC(float pointSize);
+			void savePC(std::ostream& out);
 
 			int id;
 			bool active;
@@ -101,15 +111,15 @@ namespace dso
 			float my_minRelBS;
 			bool needRefresh;
 
-			int numSparsePoints;
-			int numSparseBufferSize;
+			int numSparsePoints;		// 用于统计originalInputSparse中实际点数量
+			int numSparseBufferSize;	// 用于分配originalInputSparse的内存空间
 			InputPointSparse<MAX_RES_PER_POINT>* originalInputSparse;
 
 			bool bufferValid;
 			int numGLBufferPoints;
 			int numGLBufferGoodPoints;
-			pangolin::GlBuffer vertexBuffer;
-			pangolin::GlBuffer colorBuffer;
+			pangolin::GlBuffer vertexBufferGlobal;
+			pangolin::GlBuffer colorBufferGlobal;
 		};
 	}
 }

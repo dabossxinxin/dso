@@ -72,11 +72,9 @@ namespace dso
 
 			virtual void join() override;
 			virtual void reset() override;
-			virtual void save() override;
 			
 		private:
 
-			bool needSave;
 			bool needReset;
 			void reset_internal();
 			void save_internal();
@@ -112,6 +110,7 @@ namespace dso
 			float settings_scaledVarTH;
 			float settings_absVarTH;
 			int settings_pointCloudMode;
+			int settings_pointCloudSize;
 			float settings_minRelBS;
 			int settings_sparsity;
 
