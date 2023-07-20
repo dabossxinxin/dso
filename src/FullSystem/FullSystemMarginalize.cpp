@@ -20,8 +20,6 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
 /*
  * KFBuffer.cpp
  *
@@ -47,14 +45,10 @@
 #include "OptimizationBackend/EnergyFunctionalStructs.h"
 
 #include "IOWrapper/Output3DWrapper.h"
-
 #include "FullSystem/CoarseTracker.h"
 
 namespace dso
 {
-
-
-
 	void FullSystem::flagFramesForMarginalization(FrameHessian* newFH)
 	{
 		if (setting_minFrameAge > setting_maxFrames)
@@ -66,7 +60,6 @@ namespace dso
 			}
 			return;
 		}
-
 
 		int flagged = 0;
 		// marginalize all frames that have not enough points.

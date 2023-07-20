@@ -171,6 +171,7 @@ namespace dso
 	extern bool setting_onlyLogKFPoses;
 	extern bool debugSaveImages;
 
+	extern int pointSizeFactor;
 	extern int sparsityFactor;
 	extern bool goStepByStep;
 	extern bool plotStereoImages;

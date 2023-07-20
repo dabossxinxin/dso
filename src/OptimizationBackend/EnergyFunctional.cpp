@@ -677,7 +677,7 @@ namespace dso
 		//	if(setting_affineOptModeB <= 0)
 		//		ns.insert(ns.end(), lastNullspaces_affB.begin(), lastNullspaces_affB.end());
 
-	    // make Nullspaces matrix
+		// make Nullspaces matrix
 		MatXX N(ns[0].rows(), ns.size());
 		for (unsigned int i = 0; i < ns.size(); i++)
 			N.col(i) = ns[i].normalized();
@@ -826,8 +826,8 @@ namespace dso
 			frames[idx]->idx = idx;
 
 		allPoints.clear();
-
 		for (EFFrame* f : frames)
+		{
 			for (EFPoint* p : f->points)
 			{
 				allPoints.push_back(p);
@@ -837,7 +837,7 @@ namespace dso
 					r->targetIDX = r->target->idx;
 				}
 			}
-
+		}
 
 		EFIndicesValid = true;
 	}

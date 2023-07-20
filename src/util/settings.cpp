@@ -158,6 +158,7 @@ namespace dso
 
 	bool setting_debugout_runquiet = false;
 
+	int pointSizeFactor = 1;
 	int sparsityFactor = 5;	// not actually a setting, only some legacy stuff for coarse initializer.
 
 	void handleKey(char k)

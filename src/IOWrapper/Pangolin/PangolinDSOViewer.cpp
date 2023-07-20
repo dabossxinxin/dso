@@ -159,6 +159,8 @@ namespace dso
 					
 					// 绘制系统中所有关键帧的位姿以及地图点
 					int refreshed = 0;
+					
+					// 绘制每一帧关键帧中的地图点
 					for (KeyFrameDisplay* fh : keyframes)
 					{
 						// 绘制关键帧的位姿为蓝色
