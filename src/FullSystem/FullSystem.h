@@ -163,19 +163,30 @@ namespace dso
 		void setOriginalCalib(const VecXf &originalCalib, int originalW, int originalH);
 
 	private:
-
 		CalibHessian Hcalib;
 
 		// opt single point
 		int optimizePoint(PointHessian* point, int minObs, bool flagOOB);
+
+		// 将未激活点投影到其他关键帧中进行优化
 		PointHessian* optimizeImmaturePoint(ImmaturePoint* point, int minObs, ImmaturePointTemporaryResidual* residuals);
 
 		double linAllPointSinle(PointHessian* point, float outlierTHSlack, bool plot);
 
-		// mainPipelineFunctions
+		// 跟踪最新进入系统的帧并且得到跟踪的误差等关键信息
+		// 输入fh为最新进入的关键帧
+		// 输出Vec4结构[0]表示跟踪的残差
+		// 输出Vec4结构[1]表示仅平移的光流
+		// 输出Vec4结构[2]代码中给的是0
+		// 输出Vec4结构[3]表示旋转平移的光流
 		Vec4 trackNewCoarse(FrameHessian* fh);
+
+		// 将所有关键帧中的未成熟点投影到最新帧中进行匹配优化
 		void traceNewCoarse(FrameHessian* fh);
+
 		void activatePoints();
+
+		// 激活关键帧中已经达到激活条件的关键点
 		void activatePointsMT();
 		void activatePointsOldFirst();
 		void flagPointsForRemoval();
@@ -240,9 +251,9 @@ namespace dso
 
 		// 这些成员变量与跟踪线程相关并使用trackMutex互斥锁保护数据
 		boost::mutex trackMutex;
-		std::vector<FrameShell*> allFrameHistory;
+		std::vector<FrameShell*> allFrameHistory;	// 进入系统的帧信息都会保存在这个结构中
 		CoarseInitializer* coarseInitializer;
-		Vec5 lastCoarseRMSE;
+		Vec5 lastCoarseRMSE;	// 跟踪过程中上一次跟踪中每一层金字塔的最小残差记录在该变量中
 
 		// ================== changed by mapper-thread. protected by mapMutex ===============
 		boost::mutex mapMutex;

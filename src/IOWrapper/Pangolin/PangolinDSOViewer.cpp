@@ -155,7 +155,6 @@ namespace dso
 					// Activate efficiently by object
 					Visualization3D_display.Activate(Visualization3D_camera);
 					boost::unique_lock<boost::mutex> lk3d(model3DMutex);
-					//pangolin::glDrawColouredCube();
 					
 					// 绘制系统中所有关键帧的位姿以及地图点
 					int refreshed = 0;
@@ -494,6 +493,8 @@ namespace dso
 			if (disableAllDisplay) return;
 
 			boost::unique_lock<boost::mutex> lk(model3DMutex);
+
+			// 记录每一帧图像跟踪结果送进显示器中的时间从而计算系统的跟踪帧率
 			struct timeval time_now;
 			gettimeofday(&time_now, NULL);
 			lastNTrackingMs.emplace_back(((time_now.tv_sec - last_track.tv_sec)*1000.0f + (time_now.tv_usec - last_track.tv_usec) / 1000.0f));
@@ -502,6 +503,7 @@ namespace dso
 
 			if (!setting_render_display3D) return;
 
+			// 记录每一帧图像跟踪结果得到的相机位置从而可以绘制出里程计的轨迹
 			currentCam->setFromF(frame, HCalib);
 			allFramePoses.emplace_back(frame->camToWorld.translation().cast<float>());
 		}

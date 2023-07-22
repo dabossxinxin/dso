@@ -67,9 +67,7 @@ namespace dso
 	void FrameHessian::setStateZero(const Vec10 &state_zero)
 	{
 		assert(state_zero.head<6>().squaredNorm() < 1e-20);
-
 		this->state_zero = state_zero;
-
 
 		for (int i = 0; i < 6; i++)
 		{
@@ -91,7 +89,6 @@ namespace dso
 		w2c_leftEps_M_x0.translation() /= 1.00001;
 		w2c_leftEps_M_x0 = w2c_leftEps_M_x0 * get_worldToCam_evalPT().inverse();
 		nullspaces_scale = (w2c_leftEps_P_x0.log() - w2c_leftEps_M_x0.log()) / (2e-3);
-
 
 		nullspaces_affine.setZero();
 		nullspaces_affine.topLeftCorner<2, 1>() = Vec2(1, 0);
@@ -123,7 +120,6 @@ namespace dso
 		}
 		dI = dIp[0];
 
-
 		// make d0
 		int w = wG[0];
 		int h = hG[0];
@@ -142,9 +138,8 @@ namespace dso
 				int wlm1 = wG[lvlm1];
 				Eigen::Vector3f* dI_lm = dIp[lvlm1];
 
-
-
 				for (int y = 0; y < hl; y++)
+				{
 					for (int x = 0; x < wl; x++)
 					{
 						dI_l[x + y * wl][0] = 0.25f * (dI_lm[2 * x + 2 * y*wlm1][0] +
@@ -152,6 +147,7 @@ namespace dso
 							dI_lm[2 * x + 2 * y*wlm1 + wlm1][0] +
 							dI_lm[2 * x + 1 + 2 * y*wlm1 + wlm1][0]);
 					}
+				}
 			}
 
 			for (int idx = wl; idx < wl*(hl - 1); idx++)
@@ -159,13 +155,11 @@ namespace dso
 				float dx = 0.5f*(dI_l[idx + 1][0] - dI_l[idx - 1][0]);
 				float dy = 0.5f*(dI_l[idx + wl][0] - dI_l[idx - wl][0]);
 
-
 				if (!std::isfinite(dx)) dx = 0;
 				if (!std::isfinite(dy)) dy = 0;
 
 				dI_l[idx][1] = dx;
 				dI_l[idx][2] = dy;
-
 
 				dabs_l[idx] = dx * dx + dy * dy;
 
@@ -187,13 +181,10 @@ namespace dso
 		PRE_RTll_0 = (leftToLeft_0.rotationMatrix()).cast<float>();
 		PRE_tTll_0 = (leftToLeft_0.translation()).cast<float>();
 
-
-
 		SE3 leftToLeft = target->PRE_worldToCam * host->PRE_camToWorld;
 		PRE_RTll = (leftToLeft.rotationMatrix()).cast<float>();
 		PRE_tTll = (leftToLeft.translation()).cast<float>();
 		distanceLL = leftToLeft.translation().norm();
-
 
 		Mat33f K = Mat33f::Zero();
 		K(0, 0) = HCalib->fxl();
@@ -204,7 +195,6 @@ namespace dso
 		PRE_KRKiTll = K * PRE_RTll * K.inverse();
 		PRE_RKiTll = PRE_RTll * K.inverse();
 		PRE_KtTll = K * PRE_tTll;
-
 
 		PRE_aff_mode = AffLight::fromToVecExposure(host->ab_exposure, target->ab_exposure, host->aff_g2l(), target->aff_g2l()).cast<float>();
 		PRE_b0_mode = host->aff_g2l_0().b;

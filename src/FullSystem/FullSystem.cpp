@@ -262,6 +262,7 @@ namespace dso
 		AffLight aff_last_2_l = AffLight(0, 0);
 		std::vector<SE3, Eigen::aligned_allocator<SE3>> lastF_2_fh_tries;
 
+		// TODO：这一段代码根本进不来不知道这里写是什么意思
 		if (allFrameHistory.size() == 2)
 		{
 			for (unsigned int i = 0; i < lastF_2_fh_tries.size(); i++)
@@ -347,10 +348,12 @@ namespace dso
 		{
 			AffLight aff_g2l_this = aff_last_2_l;
 			SE3 lastF_2_fh_this = lastF_2_fh_tries[i];
+
+			// 尝试每种运动模型在多层金字塔中对运动进行优化
 			bool trackingIsGood = coarseTracker->trackNewestCoarse(
 				fh, lastF_2_fh_this, aff_g2l_this,
-				pyrLevelsUsed - 1,
-				achievedRes);	// in each level has to be at least as good as the last try.
+				pyrLevelsUsed - 1, achievedRes);
+
 			tryIterations++;
 
 			if (i != 0)
@@ -372,6 +375,7 @@ namespace dso
 			}
 
 			// 若跟踪到了一个相对正确的姿态则记录下来位姿光度参数以及帧光流参数
+			// 当运动模型中有多种情况都能得到一个相对正确的姿态此时取其中0层金字塔跟踪残差最小的那个
 			if (trackingIsGood && std::isfinite((float)coarseTracker->lastResiduals[0]) && !(coarseTracker->lastResiduals[0] >= achievedRes[0]))
 			{
 				//printf("take over. minRes %f -> %f!\n", achievedRes[0], coarseTracker->lastResiduals[0]);
@@ -381,7 +385,8 @@ namespace dso
 				haveOneGood = true;
 			}
 
-			// 记录每一层金字塔跟踪出来的每一次层的残差最小值
+			// 总共使用五层金字塔进行跟踪每一层都可以得到跟踪的残差
+			// 这里需要得每一种motion尝试后每一层金字塔的残差最小值
 			if (haveOneGood)
 			{
 				for (int i = 0; i < 5; i++)
@@ -397,12 +402,14 @@ namespace dso
 
 		if (!haveOneGood)
 		{
-			printf("BIG ERROR! tracking failed entirely. Take predictred pose and hope we may somehow recover.\n");
+			printf("BIG ERROR! tracking failed entirely.\n");
 			flowVecs = Vec3(0, 0, 0);
 			aff_g2l = aff_last_2_l;
 			lastF_2_fh = lastF_2_fh_tries[0];
 		}
 
+		// 当前进来的最新帧跟踪完毕更新这一帧中得到的每层金字塔的最小代价值
+		// 上一次跟踪得到的各层最小代价值用于下一次跟踪的是否成功的判断
 		lastCoarseRMSE = achievedRes;
 
 		// 跟踪完毕后记录新进来帧的位置和姿态
@@ -492,7 +499,7 @@ namespace dso
 		{
 			(*optimized)[k] = optimizeImmaturePoint((*toOptimize)[k], 1, tr);
 		}
-		delete[] tr;
+		delete[] tr; tr = NULL;
 	}
 
 	void FullSystem::activatePointsMT()
@@ -528,9 +535,13 @@ namespace dso
 		coarseDistanceMap->makeDistanceMap(frameHessians, newestHs);
 
 		//coarseTracker->debugPlotDistMap("distMap");
-		std::vector<ImmaturePoint*> toOptimize; toOptimize.reserve(20000);
 
-		for (FrameHessian* host : frameHessians)		// go through all active frames
+		// 保存一些待激活的点准备进行下一步的优化
+		std::vector<ImmaturePoint*> toOptimize;
+		toOptimize.reserve(20000);
+
+		// 通过这个for循环遍历所有关键帧填充数据toOptimize
+		for (FrameHessian* host : frameHessians)
 		{
 			if (host == newestHs) continue;
 
@@ -543,12 +554,11 @@ namespace dso
 				ImmaturePoint* ph = host->immaturePoints[i];
 				ph->idxInImmaturePoints = i;
 
+				// 由于是对关键帧中的特征进行激活因此若特征点状态依然为外点说明该特征质量堪忧
 				// 做点激活之前已经对所有未激活点做了一次trace若该点状态还是外点那么删除
 				if (!std::isfinite(ph->idepth_max) || ph->lastTraceStatus == IPS_OUTLIER)
 				{
-					//				immature_invalid_deleted++;
-									// remove point.
-					delete ph;
+					delete ph; ph = NULL;
 					host->immaturePoints[i] = 0;
 					continue;
 				}
@@ -562,21 +572,18 @@ namespace dso
 					&& ph->quality > setting_minTraceQuality
 					&& (ph->idepth_max + ph->idepth_min) > 0;
 
-				// if I cannot activate the point, skip it. Maybe also delete it.
+				// 若关键点不能被激活有可能这个点也需要被删掉
+				// 删除条件为若关键点对应的帧需要被边缘化或该点上一次追踪状态为IPS_OOB
 				if (!canActivate)
 				{
-					// if point will be out afterwards, delete it instead.
 					if (ph->host->flaggedForMarginalization || ph->lastTraceStatus == IPS_OOB)
 					{
-						//					immature_notReady_deleted++;
-						delete ph;
+						delete ph; ph = NULL;
 						host->immaturePoints[i] = 0;
 					}
-					//				immature_notReady_skipped++;
 					continue;
 				}
 
-				// see if we need to activate point due to distance map.
 				Vec3f ptp = KRKi * Vec3f(ph->u, ph->v, 1) + Kt * (0.5f*(ph->idepth_max + ph->idepth_min));
 				int u = ptp[0] / ptp[2] + 0.5f;
 				int v = ptp[1] / ptp[2] + 0.5f;
@@ -594,7 +601,7 @@ namespace dso
 				}
 				else
 				{
-					delete ph;
+					delete ph; ph = NULL;
 					host->immaturePoints[i] = 0;
 				}
 			}
@@ -603,7 +610,8 @@ namespace dso
 		//	printf("ACTIVATE: %d. (del %d, notReady %d, marg %d, good %d, marg-skip %d)\n",
 		//			(int)toOptimize.size(), immature_deleted, immature_notReady, immature_needMarg, immature_want, immature_margskip);
 
-		std::vector<PointHessian*> optimized; optimized.resize(toOptimize.size());
+		std::vector<PointHessian*> optimized;
+		optimized.resize(toOptimize.size());
 
 		// 将需要激活的点投影到其他帧中做一次优化
 		if (multiThreading)
@@ -626,11 +634,11 @@ namespace dso
 				for (PointFrameResidual* r : newpoint->residuals)
 					ef->insertResidual(r);
 				assert(newpoint->efPoint != 0);
-				delete ph;
+				delete ph; ph = NULL;
 			}
 			else if (newpoint == (PointHessian*)((long)(-1)) || ph->lastTraceStatus == IPS_OOB)
 			{
-				delete ph;
+				delete ph; ph = NULL;
 				ph->host->immaturePoints[ph->idxInImmaturePoints] = 0;
 			}
 			else
@@ -776,7 +784,7 @@ namespace dso
 			{
 				coarseInitializer->setFirst(&Hcalib, fh);
 			}
-			else if (coarseInitializer->trackFrame(fh, outputWrapper))	// if SNAPPED
+			else if (coarseInitializer->trackFrame(fh, outputWrapper))	// 有足够的视差跟踪成功
 			{
 				initializeFromInitializer(fh);
 				lock.unlock();
@@ -797,12 +805,12 @@ namespace dso
 			{
 				// 涉及到多线程的计算此处交换tracker避免线程冲突
 				boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);
-				CoarseTracker* tmp = coarseTracker; 
-				coarseTracker = coarseTracker_forNewKF; 
+				CoarseTracker* tmp = coarseTracker;
+				coarseTracker = coarseTracker_forNewKF;
 				coarseTracker_forNewKF = tmp;
 			}
 
-			// 新的图像进来使用trackNewCoarse进行跟踪
+			// 对新进入系统的图像进行跟踪跟踪的结果记录在tres中
 			Vec4 tres = trackNewCoarse(fh);
 			if (!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
 			{
@@ -811,7 +819,7 @@ namespace dso
 				return;
 			}
 
-			// 跟踪完成后根据计算得到的像素流动值判断是否需插入关键帧
+			// 根据跟踪结果中记录的光流值以及光度信息变化确定当前帧是否为关键帧
 			bool needToMakeKF = false;
 			if (setting_keyframesPerSecond > 0)
 			{
@@ -824,17 +832,16 @@ namespace dso
 				Vec2 refToFh = AffLight::fromToVecExposure(coarseTracker->lastRef->ab_exposure, fh->ab_exposure,
 					coarseTracker->lastRef_aff_g2l, fh->shell->aff_g2l);
 
-				// BRIGHTNESS CHECK
 				needToMakeKF = allFrameHistory.size() == 1 ||
 					setting_kfGlobalWeight * setting_maxShiftWeightT *  sqrtf((double)tres[1]) / (wG[0] + hG[0]) +
 					setting_kfGlobalWeight * setting_maxShiftWeightR *  sqrtf((double)tres[2]) / (wG[0] + hG[0]) +
 					setting_kfGlobalWeight * setting_maxShiftWeightRT * sqrtf((double)tres[3]) / (wG[0] + hG[0]) +
 					setting_kfGlobalWeight * setting_maxAffineWeight * fabs(logf((float)refToFh[0])) > 1 ||
 					2 * coarseTracker->firstCoarseRMSE < tres[0];
-
 			}
 
-			// TODO：显示窗体中所有进来的帧都显示而不区分是否为关键帧？
+			// 将跟踪结果送入到显示线程中以提供轨迹显示以及系统帧率显示
+			// TODO：此处的跟踪结果并没有经过滑窗优化直接插入显示器显示是否欠妥
 			for (IOWrap::Output3DWrapper* ow : outputWrapper)
 				ow->publishCamPose(fh->shell, &Hcalib);
 
@@ -850,6 +857,8 @@ namespace dso
 	{
 		if (linearizeOperation)
 		{
+			// goStepByStep表示系统受空格键控制一步一步进行
+			// 当追踪线程的关键帧变换时系统暂停知道按下空格键后继续进行
 			if (goStepByStep && lastRefStopID != coarseTracker->refFrameID)
 			{
 				MinimalImageF3 img(wG[0], hG[0], fh->dI);
@@ -975,6 +984,7 @@ namespace dso
 			fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(), fh->shell->aff_g2l);
 		}
 
+		// 将关键帧中的为激活点投影到最新帧中更新为激活点的信息
 		traceNewCoarse(fh);
 		delete fh;
 	}
@@ -989,6 +999,7 @@ namespace dso
 			fh->setEvalPT_scaled(fh->shell->camToWorld.inverse(), fh->shell->aff_g2l);
 		}
 
+		// 将关键帧中的未激活点投影到最新帧中更新未激活点的信息
 		traceNewCoarse(fh);
 
 		boost::unique_lock<boost::mutex> lock(mapMutex);
@@ -996,7 +1007,7 @@ namespace dso
 		// =========================== Flag Frames to be Marginalized. =========================
 		flagFramesForMarginalization(fh);
 
-		// =========================== add New Frame to Hessian Struct. =========================
+		// =========================== add New Frame to Hessian Struct. ========================
 		fh->idx = frameHessians.size();
 		frameHessians.emplace_back(fh);
 		fh->frameID = allKeyFramesHistory.size();
@@ -1005,9 +1016,9 @@ namespace dso
 
 		setPrecalcValues();
 
-		// =========================== add new residuals for old points =========================
+		// 加入新的关键帧fh后此时需要对以前的关键点添加新的残差
 		int numFwdResAdde = 0;
-		for (FrameHessian* fh1 : frameHessians)		// go through all active frames
+		for (FrameHessian* fh1 : frameHessians)
 		{
 			if (fh1 == fh) continue;
 			for (PointHessian* ph : fh1->pointHessians)

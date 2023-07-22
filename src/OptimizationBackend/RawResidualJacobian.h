@@ -29,35 +29,19 @@
 
 namespace dso
 {
-struct RawResidualJacobian
-{
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-	// ================== new structure: save independently =============.
-	VecNRf resF;
+	struct RawResidualJacobian
+	{
+		EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-	// the two rows of d[x,y]/d[xi].
-	Vec6f Jpdxi[2];			// 2x6
+		VecNRf resF;		// 关键点的光度残差[9x1]
+		Vec6f Jpdxi[2];		// 关键点坐标对帧位姿的雅可比[6x2]
+		VecCf Jpdc[2];		// 关键点坐标对帧相机内参的雅可比[4x2]
+		Vec2f Jpdd;			// 关键点坐标对关键帧逆深度的雅可比[2x1]
+		VecNRf JIdx[2];		// 关键点光度误差对关键点坐标的雅可比[9x2]
+		VecNRf JabF[2];		// 关键点光度误差对光度参数ab的雅可比[9x2]
 
-	// the two rows of d[x,y]/d[C].
-	VecCf Jpdc[2];			// 2x4
-
-	// the two rows of d[x,y]/d[idepth].
-	Vec2f Jpdd;				// 2x1
-
-	// the two columns of d[r]/d[x,y].
-	VecNRf JIdx[2];			// 9x2
-
-	// = the two columns of d[r] / d[ab]
-	VecNRf JabF[2];			// 9x2
-
-
-	// = JIdx^T * JIdx (inner product). Only as a shorthand.
-	Mat22f JIdx2;				// 2x2
-	// = Jab^T * JIdx (inner product). Only as a shorthand.
-	Mat22f JabJIdx;			// 2x2
-	// = Jab^T * Jab (inner product). Only as a shorthand.
-	Mat22f Jab2;			// 2x2
-
-};
+		Mat22f JIdx2;		// JIdx^T * JIdx[2x2]
+		Mat22f JabJIdx;		// Jab^T * JIdx[2x2]
+		Mat22f Jab2;		// Jab^T * Jab[2x2]
+	};
 }
-

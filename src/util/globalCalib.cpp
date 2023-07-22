@@ -58,14 +58,14 @@ namespace dso
 		if(wlvl>100 && hlvl > 100)
 		{
 			printf("\n\n===============WARNING!===================\n "
-					"using not enough pyramid levels.\n"
-					"Consider scaling to a resolution that is a multiple of a power of 2.\n");
+				"using not enough pyramid levels.\n"
+				"Consider scaling to a resolution that is a multiple of a power of 2.\n");
 		}
 		if(pyrLevelsUsed < 3)
 		{
 			printf("\n\n===============WARNING!===================\n "
-					"I need higher resolution.\n"
-					"I will probably segfault.\n");
+				"I need higher resolution.\n"
+				"I will probably segfault.\n");
 		}
 
 		wM3G = w-3;

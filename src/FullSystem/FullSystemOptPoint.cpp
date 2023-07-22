@@ -28,20 +28,20 @@
  *  Created on: Jan 7, 2014
  *      Author: engelj
  */
-
-#include "FullSystem/FullSystem.h"
- 
+#include "math.h"
 #include "stdio.h"
-#include "util/globalFuncs.h"
-#include <Eigen/LU>
 #include <algorithm>
-#include "IOWrapper/ImageDisplay.h"
-#include "util/globalCalib.h"
 
+#include <Eigen/LU>
 #include <Eigen/SVD>
 #include <Eigen/Eigenvalues>
+
+#include "util/globalFuncs.h"
+#include "util/globalCalib.h"
+#include "IOWrapper/ImageDisplay.h"
+
+#include "FullSystem/FullSystem.h"
 #include "FullSystem/ImmaturePoint.h"
-#include "math.h"
 
 namespace dso
 {
@@ -77,6 +77,8 @@ namespace dso
 			residuals[i].state_energy = residuals[i].state_NewEnergy;
 		}
 
+		// lastHdd表示关键点的Hessian也表示协方差的逆
+		// 因此lastHdd越大表示当前待优化点的方差越小可信度越高
 		if (!std::isfinite(lastEnergy) || lastHdd < setting_minIdepthH_act)
 		{
 			if (print)
@@ -85,8 +87,9 @@ namespace dso
 			return 0;
 		}
 
-		if (print) printf("Activate point. %d residuals. H=%f. Initial Energy: %f. Initial Id=%f\n",
-			nres, lastHdd, lastEnergy, currentIdepth);
+		if (print)
+			printf("Activate point. %d residuals. H=%f. Initial Energy: %f. Initial Id=%f\n",
+				nres, lastHdd, lastEnergy, currentIdepth);
 
 		float lambda = 0.1;
 		for (int iteration = 0; iteration < setting_GNItsOnPointActivation; iteration++)
@@ -103,18 +106,17 @@ namespace dso
 			if (!std::isfinite(lastEnergy) || newHdd < setting_minIdepthH_act)
 			{
 				if (print) printf("OptPoint: Not well-constrained (%d res, H=%.1f). E=%f. SKIP!\n",
-					nres,
-					newHdd,
-					lastEnergy);
+					nres, newHdd, lastEnergy);
 				return 0;
 			}
 
-			if (print) printf("%s %d (L %.2f) %s: %f -> %f (idepth %f)!\n",
+			if (print)
+				printf("%s %d (L %.2f) %s: %f -> %f (idepth %f)!\n",
 				(true || newEnergy < lastEnergy) ? "ACCEPT" : "REJECT",
-				iteration,
-				log10(lambda),
-				"",
-				lastEnergy, newEnergy, newIdepth);
+					iteration,
+					log10(lambda),
+					"",
+					lastEnergy, newEnergy, newIdepth);
 
 			if (newEnergy < lastEnergy)
 			{
@@ -135,6 +137,7 @@ namespace dso
 				lambda *= 5;
 			}
 
+			// 迭代终止条件若得到的step已经很小了那么就不用再进行迭代了
 			if (fabsf(step) < 0.0001*currentIdepth)
 				break;
 		}

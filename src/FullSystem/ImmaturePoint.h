@@ -78,7 +78,7 @@ namespace dso
 
 		float idepth_GT;
 
-		// 逆深度的高斯-牛顿优化
+		// 计算当前未成熟点投影到关键帧上的残差以及雅可比
 		double linearizeResidual(
 			CalibHessian *  HCalib, const float outlierTHSlack,
 			ImmaturePointTemporaryResidual* tmpRes,

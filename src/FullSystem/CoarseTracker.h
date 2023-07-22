@@ -83,7 +83,7 @@ namespace dso
 		// act as pure ouptut
 		Vec5 lastResiduals;
 		Vec3 lastFlowIndicators;
-		double firstCoarseRMSE;
+		double firstCoarseRMSE;	// µÚÒ»Ö¡¸ú×ÙµÄ0²ã½ð×ÖËþµÄ¸ú×Ù²Ð²î
 	private:
 		void makeCoarseDepthL0(std::vector<FrameHessian*> frameHessians);
 		float* idepth[PYR_LEVELS];

@@ -146,12 +146,14 @@ namespace dso
 		std::vector<FrameFramePrecalc, Eigen::aligned_allocator<FrameFramePrecalc>> targetPrecalc;
 		MinimalImageB3* debugImage;
 
-
 		inline Vec6 w2c_leftEps() const { return get_state_scaled().head<6>(); }
 		inline AffLight aff_g2l() const { return AffLight(get_state_scaled()[6], get_state_scaled()[7]); }
 		inline AffLight aff_g2l_0() const { return AffLight(get_state_zero()[6] * SCALE_A, get_state_zero()[7] * SCALE_B); }
 
+		// 设置当前frame状态的零空间
 		void setStateZero(const Vec10 &state_zero);
+
+		// 设置当前frame状态包括加上尺度后的状态
 		inline void setState(const Vec10 &state)
 		{
 			this->state = state;

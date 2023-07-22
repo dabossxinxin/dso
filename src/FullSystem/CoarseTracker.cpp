@@ -339,6 +339,8 @@ namespace dso
 
 	Vec6 CoarseTracker::calcRes(int lvl, const SE3 &refToNew, AffLight aff_g2l, float cutoffTH)
 	{
+		//debugPlot = true;
+
 		float E = 0;
 		int numTermsInE = 0;
 		int numTermsInWarped = 0;
@@ -369,6 +371,7 @@ namespace dso
 			resImage->setConst(Vec3b(255, 255, 255));
 		}
 
+		// TODO：这个应该是跟踪器中记录的上一关键帧中的关键点吧
 		int nl = pc_n[lvl];
 		float* lpc_u = pc_u[lvl];
 		float* lpc_v = pc_v[lvl];
@@ -381,14 +384,15 @@ namespace dso
 			float x = lpc_u[i];
 			float y = lpc_v[i];
 
+			// 将上一关键帧中的所有点都投影到最新进来的帧中
 			Vec3f pt = RKi * Vec3f(x, y, 1) + t * id;
-			float u = pt[0] / pt[2];
-			float v = pt[1] / pt[2];
+			float u = pt[0] / pt[2];	// 相机归一化平面横坐标
+			float v = pt[1] / pt[2];	// 相机归一化平面纵坐标
 			float Ku = fxl * u + cxl;
 			float Kv = fyl * v + cyl;
 			float new_idepth = id / pt[2];
 
-			// 只在底层金字塔中统计像素的移动
+			// 在底层金字塔中统计关键点的光流信息
 			if (lvl == 0 && i % 32 == 0)
 			{
 				// translation only (positive)
@@ -412,10 +416,6 @@ namespace dso
 				float Ku3 = fxl * u3 + cxl;
 				float Kv3 = fyl * v3 + cyl;
 
-				//translation and rotation (positive)
-				//already have it.
-
-				// 统计像素的移动大小
 				sumSquaredShiftT += (KuT - x)*(KuT - x) + (KvT - y)*(KvT - y);
 				sumSquaredShiftT += (KuT2 - x)*(KuT2 - x) + (KvT2 - y)*(KvT2 - y);
 				sumSquaredShiftRT += (Ku - x)*(Ku - x) + (Kv - y)*(Kv - y);
@@ -423,7 +423,7 @@ namespace dso
 				sumSquaredShiftNum += 2;
 			}
 
-			// 若投影点落在图像范围之外则不考虑该点
+			// 投影点的坐标必须在规定的图像范围之内并且其逆深度必须为正
 			if (!(Ku > 2 && Kv > 2 && Ku < wl - 3 && Kv < hl - 3 && new_idepth > 0)) continue;
 
 			float refColor = lpc_color[i];
@@ -446,7 +446,7 @@ namespace dso
 				E += hw * residual*residual*(2 - hw);
 				numTermsInE++;
 
-				// 记录参考帧在最新帧上投影点的相关信息
+				// 记录跟踪时参考帧在最新进来的帧上的关键点投影信息
 				buf_warped_idepth[numTermsInWarped] = new_idepth;
 				buf_warped_u[numTermsInWarped] = u;
 				buf_warped_v[numTermsInWarped] = v;
@@ -481,13 +481,15 @@ namespace dso
 			delete resImage;
 		}
 
+		//debugPlot = false;
+
 		Vec6 rs;
-		rs[0] = E;
-		rs[1] = numTermsInE;
-		rs[2] = sumSquaredShiftT / (sumSquaredShiftNum + 0.1);
+		rs[0] = E;													// 匹配能量值
+		rs[1] = numTermsInE;										// 用于匹配的关键点数量
+		rs[2] = sumSquaredShiftT / (sumSquaredShiftNum + 0.1);		// 仅平移时的光流值
 		rs[3] = 0;
-		rs[4] = sumSquaredShiftRT / (sumSquaredShiftNum + 0.1);
-		rs[5] = numSaturated / (float)numTermsInE;
+		rs[4] = sumSquaredShiftRT / (sumSquaredShiftNum + 0.1);		// 平移和旋转时的光流值
+		rs[5] = numSaturated / (float)numTermsInE;					// 匹配残差大于截断误差点的数量
 
 		return rs;
 	}
@@ -530,13 +532,16 @@ namespace dso
 		bool haveRepeated = false;
 
 		// 从金字塔顶层->底层进行跟踪
+		// 代码中实际进行了4层金字塔的匹配
 		for (int lvl = coarsestLvl; lvl >= 0; lvl--)
 		{
-			// 此处使用60%以上的点参与残差计算
-			// 问题在于无法正确给出一个固定的阈值剔除另外40%的点
-			// 因此此处设置一个光度截断误差并动态调整该值保证取得60%以上的点参与残差计算
 			float levelCutoffRepeat = 1;
 			Vec6 resOld = calcRes(lvl, refToNew_current, aff_g2l_current, setting_coarseCutoffTH*levelCutoffRepeat);
+			
+			// resOld[5]记录了匹配残差大于截断误差点的数量
+			// 若匹配残差较大的点比较多说明此时的极线并不准确
+			// 代码中先调整截断误差尝试是否可以将匹配残差大的点修复
+			// 这里若调整了截断误差的值在后面根据匹配残差优化姿态后需要在这层金字塔重新匹配一次
 			while (resOld[5] > 0.6 && levelCutoffRepeat < 50)
 			{
 				levelCutoffRepeat *= 2;
@@ -548,6 +553,7 @@ namespace dso
 
 			// 在calcRes计算残差并且得到关键帧在最新帧中的投影信息
 			// calcGSSSE函数的功能为利用这些投影信息计算Hessian以及b
+			// 实际上这个计算过程使用了匹配过程中记录的buf_warped信息
 			Mat88 H; Vec8 b;
 			calcGSSSE(lvl, H, b, refToNew_current, aff_g2l_current);
 
@@ -619,6 +625,7 @@ namespace dso
 
 				Vec6 resNew = calcRes(lvl, refToNew_new, aff_g2l_new, setting_coarseCutoffTH*levelCutoffRepeat);
 
+				// 若检测到残差下降那么接受此次迭代
 				bool accept = (resNew[0] / resNew[1]) < (resOld[0] / resOld[1]);
 
 				if (debugPrint)

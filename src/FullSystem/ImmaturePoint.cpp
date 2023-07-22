@@ -257,8 +257,8 @@ namespace dso
 			if (energy < bestEnergy)
 			{
 				bestU = ptx;
-				bestV = pty; 
-				bestEnergy = energy; 
+				bestV = pty;
+				bestEnergy = energy;
 				bestIdx = i;
 			}
 
@@ -460,7 +460,8 @@ namespace dso
 	{
 		if (tmpRes->state_state == ResState::OOB)
 		{
-			tmpRes->state_NewState = ResState::OOB; return tmpRes->state_energy;
+			tmpRes->state_NewState = ResState::OOB;
+			return tmpRes->state_energy;
 		}
 
 		FrameFramePrecalc* precalc = &(host->targetPrecalc[tmpRes->target->idx]);
@@ -484,22 +485,26 @@ namespace dso
 			float Ku, Kv;
 			Vec3f KliP;
 
+			// 将当前点投影到目标关键帧中并给出在目标关键帧中的归一化相机坐标以及相平面坐标
 			if (!projectPoint(this->u, this->v, idepth, dx, dy, HCalib,
 				PRE_RTll, PRE_tTll, drescale, u, v, Ku, Kv, KliP, new_idepth))
 			{
-				tmpRes->state_NewState = ResState::OOB; return tmpRes->state_energy;
+				tmpRes->state_NewState = ResState::OOB; 
+				return tmpRes->state_energy;
 			}
 
-
 			Vec3f hitColor = (getInterpolatedElement33(dIl, Ku, Kv, wG[0]));
-
-			if (!std::isfinite((float)hitColor[0])) { tmpRes->state_NewState = ResState::OOB; return tmpRes->state_energy; }
+			if (!std::isfinite((float)hitColor[0])) 
+			{
+				tmpRes->state_NewState = ResState::OOB; 
+				return tmpRes->state_energy; 
+			}
 			float residual = hitColor[0] - (affLL[0] * color[idx] + affLL[1]);
 
 			float hw = fabsf(residual) < setting_huberTH ? 1 : setting_huberTH / fabsf(residual);
 			energyLeft += weights[idx] * weights[idx] * hw *residual*residual*(2 - hw);
 
-			// depth derivatives.
+			// 求解光度误差对关键点逆深度的雅可比
 			float dxInterp = hitColor[1] * HCalib->fxl();
 			float dyInterp = hitColor[2] * HCalib->fyl();
 			float d_idepth = derive_idepth(PRE_tTll, u, v, dx, dy, dxInterp, dyInterp, drescale);
@@ -509,7 +514,6 @@ namespace dso
 			Hdd += (hw*d_idepth)*d_idepth;
 			bd += (hw*residual)*d_idepth;
 		}
-
 
 		if (energyLeft > energyTH*outlierTHSlack)
 		{

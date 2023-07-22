@@ -28,16 +28,10 @@
 
 namespace dso
 {
-
 	// CAMERA MODEL TO USE
-
-
 #define SSEE(val,idx) (*(((float*)&val)+idx))
-
-
 #define MAX_RES_PER_POINT 8
 #define NUM_THREADS 6
-
 
 #define todouble(x) (x).cast<double>()
 
