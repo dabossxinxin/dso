@@ -172,6 +172,7 @@ namespace dso
 		}
 	}
 
+	// 计算两帧之间的一些需要预先计算的成员变量
 	void FrameFramePrecalc::set(FrameHessian* host, FrameHessian* target, CalibHessian* HCalib)
 	{
 		this->host = host;

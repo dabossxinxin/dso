@@ -619,6 +619,7 @@ namespace dso
 		else
 			activatePointsMT_Reductor(&optimized, &toOptimize, 0, toOptimize.size(), 0, 0);
 
+		// 遍历toOptimize以optimized两个结构取出激活的关键点
 		for (unsigned k = 0; k < toOptimize.size(); k++)
 		{
 			PointHessian* newpoint = optimized[k];
@@ -688,7 +689,7 @@ namespace dso
 		//ef->setDeltaF(&Hcalib);
 		int flag_oob = 0, flag_in = 0, flag_inin = 0, flag_nores = 0;
 
-		for (FrameHessian* host : frameHessians)		// go through all active frames
+		for (FrameHessian* host : frameHessians)
 		{
 			for (unsigned int i = 0; i < host->pointHessians.size(); i++)
 			{
@@ -702,6 +703,8 @@ namespace dso
 					host->pointHessians[i] = 0;
 					flag_nores++;
 				}
+				// TODO：条件ph->isOOB是什么意思呢
+				// host->flaggedForMarginalization为设置了边缘化帧flag的关键帧中的点需要被边缘化
 				else if (ph->isOOB(fhsToKeepPoints, fhsToMargPoints) || host->flaggedForMarginalization)
 				{
 					flag_oob++;
@@ -721,6 +724,9 @@ namespace dso
 								ngoodRes++;
 							}
 						}
+
+						// 关键点的方差必须足够小说明此时关键点的信息足够准确
+						// 此时的关键点才能参与到边缘化中提供足够准确的先验信息
 						if (ph->idepth_hessian > setting_minIdepthH_marg)
 						{
 							flag_inin++;
@@ -745,6 +751,7 @@ namespace dso
 				}
 			}
 
+			// 更新关键帧中pointHessians的结构
 			for (int i = 0; i < (int)host->pointHessians.size(); i++)
 			{
 				if (host->pointHessians[i] == 0)
@@ -1004,19 +1011,25 @@ namespace dso
 
 		boost::unique_lock<boost::mutex> lock(mapMutex);
 
-		// =========================== Flag Frames to be Marginalized. =========================
+		// 加入新的关键帧后滑窗中的关键帧变多了
+		// 此时需要边缘化掉几个关键帧保证滑窗中关键帧的数量
 		flagFramesForMarginalization(fh);
 
-		// =========================== add New Frame to Hessian Struct. ========================
+		// 将最新进来的关键帧插入到关键帧结构中并插入滑窗优化类energyFunction中
 		fh->idx = frameHessians.size();
 		frameHessians.emplace_back(fh);
 		fh->frameID = allKeyFramesHistory.size();
 		allKeyFramesHistory.emplace_back(fh->shell);
 		ef->insertFrame(fh, &Hcalib);
 
+		// 计算关键帧中每两帧之间的位置关系并设置energyFunction中的deltaF
+		// TODO：deltaF是什么参数具有什么样的作用
 		setPrecalcValues();
 
 		// 加入新的关键帧fh后此时需要对以前的关键点添加新的残差
+		// lastResiduals中保存了关键点的两组残差 TODO：两组残差的作用分别是什么
+		// lastResiduals[0]保存了该关键点在最后一帧关键帧投影的光度残差
+		// lastResiduals[1]保存了该关键点在最后一帧的上一帧关键帧投影的光度残差
 		int numFwdResAdde = 0;
 		for (FrameHessian* fh1 : frameHessians)
 		{
@@ -1027,17 +1040,18 @@ namespace dso
 				r->setState(ResState::INLIER);
 				ph->residuals.emplace_back(r);
 				ef->insertResidual(r);
-				ph->lastResiduals[1] = ph->lastResiduals[0];
-				ph->lastResiduals[0] = std::pair<PointFrameResidual*, ResState>(r, ResState::INLIER);
+				ph->lastResiduals[1] = ph->lastResiduals[0];	// 滑窗中次新帧投影的光度残差
+				ph->lastResiduals[0] = std::pair<PointFrameResidual*, ResState>(r, ResState::INLIER);	// 滑窗中最新帧投影的光度残差
 				numFwdResAdde += 1;
 			}
 		}
 
-		// =========================== Activate Points (& flag for marginalization). =========================
+		// 激活关键点：对滑窗中所有关键帧中具有激活条件的点进行激活
+		// 激活时需要将这些点投影到各个关键帧中进行优化后再设置该点状态为激活状态
 		activatePointsMT();
 		ef->makeIDX();
 
-		// =========================== OPTIMIZE ALL =========================
+		// 开始进行滑窗优化
 		fh->frameEnergyTH = frameHessians.back()->frameEnergyTH;
 		float rmse = optimize(setting_maxOptIterations);
 
@@ -1063,7 +1077,9 @@ namespace dso
 
 		if (isLost) return;
 
-		// =========================== REMOVE OUTLIER =========================
+		// 去除关键帧序列中所有残差序列为空的关键点
+		// 同步的也要去除energyfunction中该关键点对应的残差以及优化变量
+		// TODO：需要弄清楚的一点是怎么会产生残差序列为空的关键点
 		removeOutliers();
 		{
 			boost::unique_lock<boost::mutex> crlock(coarseTrackerSwapMutex);

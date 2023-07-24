@@ -539,6 +539,9 @@ namespace dso
 	void FullSystem::removeOutliers()
 	{
 		int numPointsDropped = 0;
+		
+		// 去掉滑窗关键帧序列中关键点残差序列为空的关键点
+		// TODO：怎么会产生残差序列为空的情况
 		for (FrameHessian* fh : frameHessians)
 		{
 			for (unsigned int i = 0; i < fh->pointHessians.size(); i++)
@@ -571,8 +574,11 @@ namespace dso
 		nullspaces_affA.clear();
 		nullspaces_affB.clear();
 
+		// n为优化变量的维度：相机内参个数加上每一帧关键帧的8个优化变量
 		int n = CPARS + frameHessians.size() * 8;
 		std::vector<VecX> nullspaces_x0_pre;
+
+		// 获取每一帧相机姿态的零空间
 		for (int i = 0; i < 6; i++)
 		{
 			VecX nullspace_x0(n);
@@ -586,6 +592,8 @@ namespace dso
 			nullspaces_x0_pre.emplace_back(nullspace_x0);
 			nullspaces_pose.emplace_back(nullspace_x0);
 		}
+
+		// 获取光度参数的零空间
 		for (int i = 0; i < 2; i++)
 		{
 			VecX nullspace_x0(n);
@@ -601,6 +609,7 @@ namespace dso
 			if (i == 1) nullspaces_affB.emplace_back(nullspace_x0);
 		}
 
+		// 获取尺度参数零空间
 		VecX nullspace_x0(n);
 		nullspace_x0.setZero();
 		for (FrameHessian* fh : frameHessians)

@@ -148,20 +148,29 @@ namespace dso
 			return (PointHessian*)((long)(-1));		// yeah I'm like 99% sure this is OK on 32bit systems.
 		}
 
+		// 残差比较小的投影情况为好的情况记录
+		// 若当前点满足投影残差的情况大最小观测帧的要求那么记录下来
 		int numGoodRes = 0;
 		for (int i = 0; i < nres; i++)
 			if (residuals[i].state_state == ResState::INLIER) numGoodRes++;
 
-		// 优化后的点最少在一个关键帧中是好的
+		// 优化后的点至少在一个关键帧中是内点如果不满足该条件
+		// 那么当前点只是一个局部最优的点应该删掉该点
 		if (numGoodRes < minObs)
 		{
 			if (print) printf("OptPoint: OUTLIER!\n");
-			return (PointHessian*)((long)(-1));		// yeah I'm like 99% sure this is OK on 32bit systems.
+			return (PointHessian*)((long)(-1));
 		}
 
 		PointHessian* p = new PointHessian(point, &Hcalib);
-		if (!std::isfinite(p->energyTH)) { delete p; return (PointHessian*)((long)(-1)); }
+		if (!std::isfinite(p->energyTH)) {
+			delete p; p = NULL;
+			return (PointHessian*)((long)(-1));
+		}
 
+		// 初始化lastResiduals结构后面会填充值进去
+		// lastResiduals中[0]记录的是关键帧中最后一帧的残差和状态
+		// lastResiduals中[1]记录的是关键帧中最后一帧的前一帧的残差和状态
 		p->lastResiduals[0].first = 0;
 		p->lastResiduals[0].second = ResState::OOB;
 		p->lastResiduals[1].first = 0;

@@ -71,7 +71,7 @@ namespace dso
 		EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 		// static values
 		static int instanceCounter;
-		FrameHessian* host;	// defines row
+		FrameHessian* host;		// defines row
 		FrameHessian* target;	// defines column
 
 		// precalc values
@@ -87,7 +87,7 @@ namespace dso
 		Vec3f PRE_KtTll;
 		Vec3f PRE_tTll_0;
 
-		float distanceLL;
+		float distanceLL;	// 记录host帧与target帧之间的距离
 
 		inline ~FrameFramePrecalc() {}
 		inline FrameFramePrecalc() { host = target = 0; }
@@ -114,7 +114,7 @@ namespace dso
 		float frameEnergyTH;	// set dynamically depending on tracking residual
 		float ab_exposure;
 
-		bool flaggedForMarginalization;
+		bool flaggedForMarginalization;		// 滑窗关键帧序列中需要被置为边缘化状态的帧
 
 		std::vector<PointHessian*> pointHessians;				// contains all ACTIVE points.
 		std::vector<PointHessian*> pointHessiansMarginalized;	// contains all MARGINALIZED points (= fully marginalized, usually because point went OOB.)
@@ -401,10 +401,12 @@ namespace dso
 			this->idepth = idepth;
 			this->idepth_scaled = SCALE_IDEPTH * idepth;
 		}
+
 		inline void setIdepthScaled(float idepth_scaled) {
 			this->idepth = SCALE_IDEPTH_INVERSE * idepth_scaled;
 			this->idepth_scaled = idepth_scaled;
 		}
+
 		inline void setIdepthZero(float idepth) {
 			idepth_zero = idepth;
 			idepth_zero_scaled = SCALE_IDEPTH * idepth;
@@ -445,4 +447,3 @@ namespace dso
 		}
 	};
 }
-

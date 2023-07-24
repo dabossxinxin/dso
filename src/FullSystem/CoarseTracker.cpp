@@ -707,12 +707,11 @@ namespace dso
 	{
 		if (w[1] == 0) return;
 
-
 		int lvl = 0;
-
 		{
 			std::vector<float> allID;
-			for (int i = 0; i < h[lvl] * w[lvl]; i++)
+			int imageSize = h[lvl] * w[lvl];
+			for (int i = 0; i < imageSize; i++)
 			{
 				if (idepth[lvl][i] > 0)
 					allID.emplace_back(idepth[lvl][i]);
@@ -735,7 +734,6 @@ namespace dso
 				}
 				else
 				{
-
 					// slowly adapt: change by maximum 10% of old span.
 					float maxChange = 0.3*(*maxID_pt - *minID_pt);
 
@@ -743,7 +741,6 @@ namespace dso
 						minID = *minID_pt - maxChange;
 					if (minID > *minID_pt + maxChange)
 						minID = *minID_pt + maxChange;
-
 
 					if (maxID < *maxID_pt - maxChange)
 						maxID = *maxID_pt - maxChange;
@@ -755,17 +752,18 @@ namespace dso
 				}
 			}
 
-
 			MinimalImageB3 mf(w[lvl], h[lvl]);
 			mf.setBlack();
-			for (int i = 0; i < h[lvl] * w[lvl]; i++)
+			for (int i = 0; i < imageSize; i++)
 			{
 				int c = lastRef->dIp[lvl][i][0] * 0.9f;
 				if (c > 255) c = 255;
 				mf.at(i) = Vec3b(c, c, c);
 			}
 			int wl = w[lvl];
-			for (int y = 3; y < h[lvl] - 3; y++)
+			int hl = h[lvl];
+			for (int y = 3; y < hl - 3; y++)
+			{
 				for (int x = 3; x < wl - 3; x++)
 				{
 					int idx = x + y * wl;
@@ -785,8 +783,8 @@ namespace dso
 						//mf.at(idx) = makeJet3B(id);
 					}
 				}
+			}
 			//IOWrap::displayImage("coarseDepth LVL0", &mf, false);
-
 
 			for (IOWrap::Output3DWrapper* ow : wraps)
 				ow->pushDepthImage(&mf);
@@ -797,7 +795,6 @@ namespace dso
 				snprintf(buf, 1000, "images_out/predicted_%05d_%05d.png", lastRef->shell->id, refFrameID);
 				IOWrap::writeImage(buf, &mf);
 			}
-
 		}
 	}
 

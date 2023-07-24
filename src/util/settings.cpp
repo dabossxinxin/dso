@@ -59,8 +59,8 @@ namespace dso
 
 	float setting_desiredImmatureDensity = 1500; // immature points per frame
 	float setting_desiredPointDensity = 2000; // aimed total points in the active window.
-	float setting_minPointsRemaining = 0.05;  // marg a frame if less than X% points remain.
-	float setting_maxLogAffFacInWindow = 0.7; // marg a frame if factor between intensities to current frame is larger than 1/X or X.
+	float setting_minPointsRemaining = 0.05;  // 边缘化掉少于X%关键点的帧
+	float setting_maxLogAffFacInWindow = 0.7; // 边缘化掉光度变化大于X的帧
 
 	int   setting_minFrames = 5; // min frames in window.
 	int   setting_maxFrames = 7; // max frames in window.

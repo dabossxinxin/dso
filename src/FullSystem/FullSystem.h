@@ -192,6 +192,10 @@ namespace dso
 		void flagPointsForRemoval();
 		void makeNewTraces(FrameHessian* newFrame, float* gtDepth);
 		void initializeFromInitializer(FrameHessian* newFrame);
+
+		// 如果新进来的帧是关键帧那么为了维护滑窗中帧的数量稳定
+		// 此时需要对滑窗中的关键帧进行边缘化操作，此函数为设置边缘化flag
+		// TODO：函数的输入变量newFH并没有用到是否这里是作者写的有小问题
 		void flagFramesForMarginalization(FrameHessian* newFH);
 
 		void removeOutliers();

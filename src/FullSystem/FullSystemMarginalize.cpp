@@ -62,18 +62,19 @@ namespace dso
 		}
 
 		int flagged = 0;
-		// marginalize all frames that have not enough points.
+		// 遍历所有的关键帧根据给定的条件边缘化掉不满足条件的帧
 		for (int i = 0; i < (int)frameHessians.size(); i++)
 		{
 			FrameHessian* fh = frameHessians[i];
 			int in = fh->pointHessians.size() + fh->immaturePoints.size();
 			int out = fh->pointHessiansMarginalized.size() + fh->pointHessiansOut.size();
 
-
 			Vec2 refToFh = AffLight::fromToVecExposure(frameHessians.back()->ab_exposure, fh->ab_exposure,
 				frameHessians.back()->aff_g2l(), fh->aff_g2l());
 
-
+			// 1、去掉保存关键点较少的帧
+			// 2、去掉与最新关键帧相比光度变化较大的帧
+			// 3、关键帧序列去掉边缘化的帧后其数量不能小于setting_minFrames
 			if ((in < setting_minPointsRemaining *(in + out) || fabs(logf((float)refToFh[0])) > setting_maxLogAffFacInWindow)
 				&& ((int)frameHessians.size()) - flagged > setting_minFrames)
 			{
@@ -97,13 +98,13 @@ namespace dso
 			}
 		}
 
-		// marginalize one.
+		// 边缘化掉到最新关键帧的距离占所有距离比重最大的帧
+		// TODO：以上原则为关键帧的边缘化原则但是好像实际不是这样运算的？？
 		if ((int)frameHessians.size() - flagged >= setting_maxFrames)
 		{
 			double smallestScore = 1;
 			FrameHessian* toMarginalize = 0;
 			FrameHessian* latest = frameHessians.back();
-
 
 			for (FrameHessian* fh : frameHessians)
 			{

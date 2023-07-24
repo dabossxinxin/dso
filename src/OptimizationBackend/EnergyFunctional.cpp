@@ -46,6 +46,7 @@ namespace dso
 		adTarget = new Mat88[nFrames*nFrames];
 
 		for (int h = 0; h < nFrames; h++)
+		{
 			for (int t = 0; t < nFrames; t++)
 			{
 				FrameHessian* host = frames[h]->data;
@@ -58,7 +59,6 @@ namespace dso
 
 				AH.topLeftCorner<6, 6>() = -hostToTarget.Adj().transpose();
 				AT.topLeftCorner<6, 6>() = Mat66::Identity();
-
 
 				Vec2f affLL = AffLight::fromToVecExposure(host->ab_exposure, target->ab_exposure, host->aff_g2l_0(), target->aff_g2l_0()).cast<float>();
 				AT(6, 6) = -affLL[0];
@@ -78,6 +78,7 @@ namespace dso
 				adHost[h + t * nFrames] = AH;
 				adTarget[h + t * nFrames] = AT;
 			}
+		}
 		cPrior = VecC::Constant(setting_initialCalibHessian);
 
 		if (adHostF != 0) delete[] adHostF;
@@ -86,12 +87,13 @@ namespace dso
 		adTargetF = new Mat88f[nFrames*nFrames];
 
 		for (int h = 0; h < nFrames; h++)
+		{
 			for (int t = 0; t < nFrames; t++)
 			{
 				adHostF[h + t * nFrames] = adHost[h + t * nFrames].cast<float>();
 				adTargetF[h + t * nFrames] = adTarget[h + t * nFrames].cast<float>();
 			}
-
+		}
 		cPriorF = cPrior.cast<float>();
 		EFAdjointsValid = true;
 	}
@@ -396,6 +398,7 @@ namespace dso
 
 	EFFrame* EnergyFunctional::insertFrame(FrameHessian* fh, CalibHessian* Hcalib)
 	{
+		// EFFrame与FrameHessian等价
 		EFFrame* eff = new EFFrame(fh);
 		eff->idx = frames.size();
 		frames.emplace_back(eff);
@@ -403,6 +406,7 @@ namespace dso
 		nFrames++;
 		fh->efFrame = eff;
 
+		// 新的关键帧进来后需要对上一次边缘化后的Hessian以及b扩充维度
 		assert(HM.cols() == 8 * nFrames + CPARS - 8);
 		bM.conservativeResize(8 * nFrames + CPARS);
 		HM.conservativeResize(8 * nFrames + CPARS, 8 * nFrames + CPARS);
@@ -450,12 +454,10 @@ namespace dso
 		p->residualsAll[r->idxInAll]->idxInAll = r->idxInAll;
 		p->residualsAll.pop_back();
 
-
 		if (r->isActive())
 			r->host->data->shell->statistics_goodResOnThis++;
 		else
 			r->host->data->shell->statistics_outlierResOnThis++;
-
 
 		connectivityMap[(((uint64_t)r->host->frameID) << 32) + ((uint64_t)r->target->frameID)][0]--;
 		nResiduals--;
