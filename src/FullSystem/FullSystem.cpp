@@ -639,8 +639,8 @@ namespace dso
 			}
 			else if (newpoint == (PointHessian*)((long)(-1)) || ph->lastTraceStatus == IPS_OOB)
 			{
-				delete ph; ph = NULL;
 				ph->host->immaturePoints[ph->idxInImmaturePoints] = 0;
+				delete ph; ph = NULL;
 			}
 			else
 			{
@@ -696,6 +696,7 @@ namespace dso
 				PointHessian* ph = host->pointHessians[i];
 				if (ph == 0) continue;
 
+				// 丢掉相机后面的点以及没有残差的点
 				if (ph->idepth_scaled < 0 || ph->residuals.size() == 0)
 				{
 					host->pointHessiansOut.emplace_back(ph);
@@ -915,7 +916,6 @@ namespace dso
 			FrameHessian* fh = unmappedTrackedFrames.front();
 			unmappedTrackedFrames.pop_front();
 
-
 			// guaranteed to make a KF for the very first two tracked frames.
 			if (allKeyFramesHistory.size() <= 2)
 			{
@@ -1011,22 +1011,23 @@ namespace dso
 
 		boost::unique_lock<boost::mutex> lock(mapMutex);
 
-		// 加入新的关键帧后滑窗中的关键帧变多了
-		// 此时需要边缘化掉几个关键帧保证滑窗中关键帧的数量
+		// 设置边缘化关键帧，此处参数fh没有用可以把这个参数去掉
+		// 边缘化条件1：活跃点只剩下5%左右的关键帧
+		// 边缘化条件2：与最新关键帧曝光参数变化大于0.7
+		// 边缘化条件3：距离最远的关键帧
 		flagFramesForMarginalization(fh);
 
 		// 将最新进来的关键帧插入到关键帧结构中并插入滑窗优化类energyFunction中
 		fh->idx = frameHessians.size();
-		frameHessians.emplace_back(fh);
+		frameHessians.emplace_back(fh);					// 首先插入到滑动窗口中
 		fh->frameID = allKeyFramesHistory.size();
-		allKeyFramesHistory.emplace_back(fh->shell);
-		ef->insertFrame(fh, &Hcalib);
+		allKeyFramesHistory.emplace_back(fh->shell);	// 再次插入到关键帧序列中
+		ef->insertFrame(fh, &Hcalib);					// 最后插入到能量函数中
 
-		// 计算关键帧中每两帧之间的位置关系并设置energyFunction中的deltaF
-		// TODO：deltaF是什么参数具有什么样的作用
+		// 每在滑窗中添加一个位姿都要设置位姿的线性化点
 		setPrecalcValues();
 
-		// 加入新的关键帧fh后此时需要对以前的关键点添加新的残差
+		// 构建之前关键帧与当前帧fh的残差
 		// lastResiduals中保存了关键点的两组残差 TODO：两组残差的作用分别是什么
 		// lastResiduals[0]保存了该关键点在最后一帧关键帧投影的光度残差
 		// lastResiduals[1]保存了该关键点在最后一帧的上一帧关键帧投影的光度残差
@@ -1051,7 +1052,12 @@ namespace dso
 		activatePointsMT();
 		ef->makeIDX();
 
-		// 开始进行滑窗优化
+		// 使用GN法对位姿、光度参数、逆深度、相机内参进行优化，边缘化需要维护两个H矩阵和b矩阵
+		// 其中位姿和光度参数使用FEJ，除了最新一帧相关H矩阵固定在上一次优化，残差仍然使用更新后的状态求
+		// 被边缘化部分的残差更新为b=b+H*delta
+		// 其中第一帧位姿和其上点的逆深度由于初始化具有先验光度参数具有先验
+		// 使用伴随性质将相对位姿变为世界坐标系下的绝对位姿(local->global)
+		// 减去求解的增量零空间部分，防止求解的参数在零空间乱飘
 		fh->frameEnergyTH = frameHessians.back()->frameEnergyTH;
 		float rmse = optimize(setting_maxOptIterations);
 
@@ -1093,16 +1099,16 @@ namespace dso
 		debugPlot("post Optimize");
 
 		// =========================== (Activate-)Marginalize Points =========================
-		flagPointsForRemoval();
-		ef->dropPointsF();
-		getNullspaces(
+		flagPointsForRemoval();			// 标记要移除的点：边缘化或直接丢掉
+		ef->dropPointsF();				// energyFunction中扔掉drop的点
+		getNullspaces(					// 每次设置线性化点都会更新零空间
 			ef->lastNullspaces_pose,
 			ef->lastNullspaces_scale,
 			ef->lastNullspaces_affA,
 			ef->lastNullspaces_affB);
-		ef->marginalizePointsF();
+		ef->marginalizePointsF();		// 边缘化掉点，加在HM,bM上
 
-		// =========================== add new Immature points & new residuals =========================
+		// 在最新帧第0层提取随机方向梯度最大的像素构造ImmaturePoint
 		makeNewTraces(fh, 0);
 
 		for (IOWrap::Output3DWrapper* ow : outputWrapper)
@@ -1111,11 +1117,13 @@ namespace dso
 			ow->publishKeyframes(frameHessians, false, &Hcalib);
 		}
 
-		// =========================== Marginalize Frames =========================
+		// 将被边缘化的帧的帧的8个状态量挪到右下角然后计算舒尔补
+		// 删除在被边缘化帧上的残差
 		for (unsigned int i = 0; i < frameHessians.size(); i++)
 		{
 			if (frameHessians[i]->flaggedForMarginalization)
 			{
+				// 主要函数功能在ef->marginalizeFrame()中
 				marginalizeFrame(frameHessians[i]); i = 0;
 			}
 		}
@@ -1230,14 +1238,17 @@ namespace dso
 		//printf("MADE %d IMMATURE POINTS!\n", (int)newFrame->immaturePoints.size());
 	}
 
+	// 计算frameHessians的预计算值和状态的delta值
 	void FullSystem::setPrecalcValues()
 	{
 		for (FrameHessian* fh : frameHessians)
 		{
+			// TODO：这里还计算了关键帧与自己的变换关系是否是多余的
 			fh->targetPrecalc.resize(frameHessians.size());
 			for (unsigned int i = 0; i < frameHessians.size(); i++)
 				fh->targetPrecalc[i].set(fh, frameHessians[i], &Hcalib);
 		}
+		// 计算各种状态（两帧之间的位姿变换，相机内参，帧位姿，先验，逆深度）的增量
 		ef->setDeltaF(&Hcalib);
 	}
 

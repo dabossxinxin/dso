@@ -40,8 +40,16 @@ namespace dso
 
 	void EnergyFunctional::setAdjointsF(CalibHessian* Hcalib)
 	{
-		if (adHost != 0) delete[] adHost;
-		if (adTarget != 0) delete[] adTarget;
+		if (adHost != 0)
+		{
+			delete[] adHost;
+			adHost = NULL;
+		}
+		if (adTarget != 0)
+		{
+			delete[] adTarget;
+			adTarget = NULL;
+		}	
 		adHost = new Mat88[nFrames*nFrames];
 		adTarget = new Mat88[nFrames*nFrames];
 
@@ -156,13 +164,15 @@ namespace dso
 		if (adHTdeltaF != 0) delete[] adHTdeltaF;
 		adHTdeltaF = new Mat18f[nFrames*nFrames];
 		for (int h = 0; h < nFrames; h++)
+		{
 			for (int t = 0; t < nFrames; t++)
 			{
 				int idx = h + t * nFrames;
 				adHTdeltaF[idx] = frames[h]->data->get_state_minus_stateZero().head<8>().cast<float>().transpose() * adHostF[idx]
 					+ frames[t]->data->get_state_minus_stateZero().head<8>().cast<float>().transpose() * adTargetF[idx];
 			}
-
+		}
+			
 		cDeltaF = HCalib->value_minus_value_zero.cast<float>();
 		for (EFFrame* f : frames)
 		{
@@ -243,7 +253,8 @@ namespace dso
 	{
 		assert(x.size() == CPARS + nFrames * 8);
 
-		VecXf xF = x.cast<float>();
+		// 前面求解Hx=b都对b取了正，所以这里对求到的x要给负号
+		VecXf xF = x.cast<float>();			// 
 		HCalib->step = -x.head<CPARS>();
 
 		Mat18f* xAd = new Mat18f[nFrames*nFrames];
@@ -258,6 +269,7 @@ namespace dso
 				+ xF.segment<8>(CPARS + 8 * t->idx).transpose() * adTargetF[h->idx + nFrames * t->idx];
 		}
 
+		// 多线程更新关键点的逆深度
 		if (MT)
 			red->reduce(boost::bind(&EnergyFunctional::resubstituteFPt,
 				this, cstep, xAd, _1, _2, _3, _4), 0, allPoints.size(), 50);
@@ -267,6 +279,7 @@ namespace dso
 		delete[] xAd;
 	}
 
+	// FPt:frame point
 	void EnergyFunctional::resubstituteFPt(
 		const VecCf &xc, Mat18f* xAd, int min, int max, Vec10* stats, int tid)
 	{
@@ -275,7 +288,10 @@ namespace dso
 			EFPoint* p = allPoints[k];
 
 			int ngoodres = 0;
-			for (EFResidual* r : p->residualsAll) if (r->isActive()) ngoodres++;
+			for (EFResidual* r : p->residualsAll)
+			{
+				if (r->isActive()) ngoodres++;
+			}
 			if (ngoodres == 0)
 			{
 				p->data->step = 0;
@@ -295,9 +311,9 @@ namespace dso
 		}
 	}
 
+	// FEnergy:frame energy
 	double EnergyFunctional::calcMEnergyF()
 	{
-
 		assert(EFDeltaValid);
 		assert(EFAdjointsValid);
 		assert(EFIndicesValid);
@@ -306,6 +322,7 @@ namespace dso
 		return delta.dot(2 * bM + HM * delta);
 	}
 
+	// PtEnergy:point energy
 	void EnergyFunctional::calcLEnergyPt(int min, int max, Vec10* stats, int tid)
 	{
 		Accumulator11 E;
@@ -666,9 +683,12 @@ namespace dso
 
 	void EnergyFunctional::orthogonalize(VecX* b, MatXX* H)
 	{
-		//	VecX eigenvaluesPre = H.eigenvalues().real();
-		//	std::sort(eigenvaluesPre.data(), eigenvaluesPre.data()+eigenvaluesPre.size());
-		//	std::cout << "EigPre:: " << eigenvaluesPre.transpose() << "\n";
+		if (H != 0)
+		{
+			VecX eigenvaluesPre = (*H).eigenvalues().real();
+			std::sort(eigenvaluesPre.data(), eigenvaluesPre.data() + eigenvaluesPre.size());
+			std::cout << "EigPre:: " << eigenvaluesPre.transpose() << "\n";
+		}
 
 		// decide to which nullspaces to orthogonalize.
 		std::vector<VecX> ns;
@@ -684,7 +704,7 @@ namespace dso
 		for (unsigned int i = 0; i < ns.size(); i++)
 			N.col(i) = ns[i].normalized();
 
-		// compute Npi := N * (N' * N)^-1 = pseudo inverse of N.
+		// 求解N矩阵的伪逆其形式为Npseudo_inverse = N*(N'*N)^-1
 		Eigen::JacobiSVD<MatXX> svdNN(N, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
 		VecX SNN = svdNN.singularValues();
@@ -699,20 +719,25 @@ namespace dso
 			if (SNN[i] > setting_solverModeDelta*maxSv) SNN[i] = 1.0 / SNN[i]; else SNN[i] = 0;
 		}
 
-		MatXX Npi = svdNN.matrixU() * SNN.asDiagonal() * svdNN.matrixV().transpose(); 	// [dim] x 9.
-		MatXX NNpiT = N * Npi.transpose(); 	// [dim] x [dim].
-		MatXX NNpiTS = 0.5*(NNpiT + NNpiT.transpose());	// = N * (N' * N)^-1 * N'.
+		// N*(N'*N)^-1*N'= NNpiTS实际上是一个对称矩阵因此这里强行改成对称的形式
+		MatXX Npi = svdNN.matrixU() * SNN.asDiagonal() * svdNN.matrixV().transpose();
+		MatXX NNpiT = N * Npi.transpose();
+		MatXX NNpiTS = 0.5*(NNpiT + NNpiT.transpose());
 
 		if (b != 0) *b -= NNpiTS * *b;
 		if (H != 0) *H -= NNpiTS * *H * NNpiTS;
 
-		//	std::cout << std::setprecision(16) << "Orth SV: " << SNN.reverse().transpose() << "\n";
-		//	VecX eigenvaluesPost = H.eigenvalues().real();
-		//	std::sort(eigenvaluesPost.data(), eigenvaluesPost.data()+eigenvaluesPost.size());
-		//	std::cout << "EigPost:: " << eigenvaluesPost.transpose() << "\n";
-
+		if (H != 0)
+		{
+			std::cout << std::setprecision(16) << "Orth SV: " << SNN.reverse().transpose() << "\n";
+			VecX eigenvaluesPost = (*H).eigenvalues().real();
+			std::sort(eigenvaluesPost.data(), eigenvaluesPost.data() + eigenvaluesPost.size());
+			std::cout << "EigPost:: " << eigenvaluesPost.transpose() << "\n";
+		}
 	}
 
+	// 计算舒尔补消元的系数然后解出第一个方程关于位姿、光度参数以及相机内参的增量值
+	// 根据位姿、光度参数以及相机内参的增量求解逆深度的增量
 	void EnergyFunctional::solveSystemF(int iteration, double lambda, CalibHessian* HCalib)
 	{
 		if (setting_solverMode & SOLVER_USE_GN) lambda = 0;
@@ -725,6 +750,7 @@ namespace dso
 		MatXX HL_top, HA_top, H_sc;
 		VecX  bL_top, bA_top, bM_top, b_sc;
 
+		// 这里的MT代表多线程
 		accumulateAF_MT(HA_top, bA_top, multiThreading);
 		accumulateLF_MT(HL_top, bL_top, multiThreading);
 		accumulateSCF_MT(H_sc, b_sc, multiThreading);
@@ -752,7 +778,6 @@ namespace dso
 			lastbS = bFinal_top;
 
 			for (int i = 0; i < 8 * nFrames + CPARS; i++) HFinal_top(i, i) *= (1 + lambda);
-
 		}
 		else
 		{

@@ -142,13 +142,12 @@ namespace dso
 
 	void FullSystem::marginalizeFrame(FrameHessian* frame)
 	{
-		// marginalize or remove all this frames points.
+		// 边缘化帧上的所有关键点应该被删除掉
 		assert((int)frame->pointHessians.size() == 0);
 
 		ef->marginalizeFrame(frame->efFrame);
 
-		// drop all observations of existing points in that frame.
-
+		// 删除所边缘化帧上的观测量
 		for (FrameHessian* fh : frameHessians)
 		{
 			if (fh == frame) continue;

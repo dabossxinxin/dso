@@ -20,8 +20,6 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
 #pragma once
 #include "util/NumType.h"
 
@@ -29,65 +27,73 @@
 #include "SSE2NEON.h"
 #endif
 
+// AccumulatorXX
+// Accumulator11
+// AccumulatorX
+// Accumulator14
+// AccumulatorApprox
+// Accumulator9
+
 namespace dso
 {
-
-
+// 维护一个NxM矩阵的累加器
 template<int i, int j>
 class AccumulatorXX
 {
 public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  Eigen::Matrix<float,i,j> A;
-  Eigen::Matrix<float,i,j> A1k;
-  Eigen::Matrix<float,i,j> A1m;
-  size_t num;
+	Eigen::Matrix<float, i, j> A;
+	Eigen::Matrix<float, i, j> A1k;
+	Eigen::Matrix<float, i, j> A1m;
+	size_t num;
 
-  inline void initialize()
-  {
-    A.setZero();
-    A1k.setZero();
-    A1m.setZero();
-    num = numIn1 = numIn1k = numIn1m = 0;
-  }
+	inline void initialize()
+	{
+		A.setZero();
+		A1k.setZero();
+		A1m.setZero();
+		num = numIn1 = numIn1k = numIn1m = 0;
+	}
 
-  inline void finish()
-  {
-	shiftUp(true);
-    num = numIn1 + numIn1k + numIn1m;
-  }
+	inline void finish()
+	{
+		shiftUp(true);
+		num = numIn1 + numIn1k + numIn1m;
+	}
 
 
-  inline void update(const Eigen::Matrix<float,i,1> &L, const Eigen::Matrix<float,j,1> &R, float w)
-  {
-	  A += w*L*R.transpose();
-	  numIn1++;
-	  shiftUp(false);
-  }
+	inline void update(const Eigen::Matrix<float, i, 1> &L, const Eigen::Matrix<float, j, 1> &R, float w)
+	{
+		A += w * L*R.transpose();
+		numIn1++;
+		shiftUp(false);
+	}
 
 private:
-  float numIn1, numIn1k, numIn1m;
+	float numIn1, numIn1k, numIn1m;
 
-  void shiftUp(bool force)
-  {
-	  if(numIn1 > 1000 || force)
-	  {
-		  A1k += A;
-		  A.setZero();
-		  numIn1k+=numIn1;
-		  numIn1=0;
-	  }
-	  if(numIn1k > 1000 || force)
-	  {
-		  A1m += A1k;
-		  A1k.setZero();
-		  numIn1m+=numIn1k;
-		  numIn1k=0;
-	  }
-  }
+	void shiftUp(bool force)
+	{
+		if (numIn1 > 1000 || force)
+		{
+			A1k += A;
+			A.setZero();
+			numIn1k += numIn1;
+			numIn1 = 0;
+		}
+		if (numIn1k > 1000 || force)
+		{
+			A1m += A1k;
+			A1k.setZero();
+			numIn1m += numIn1k;
+			numIn1k = 0;
+		}
+	}
 };
 
+// 计算1x1矩阵维度的Hessian矩阵
+// TODO：与Accumulator9一样，同样Shift操作显得很多余
 class Accumulator11
 {
 public:
@@ -111,12 +117,12 @@ public:
 		A = SSEData1m[0 + 0] + SSEData1m[0 + 1] + SSEData1m[0 + 2] + SSEData1m[0 + 3];
 	}
 
-
 	inline void updateSingle(
 		const float val)
 	{
 		SSEData[0] += val;
-		num++; numIn1++;
+		num++; 
+		numIn1++;
 		shiftUp(false);
 	}
 
@@ -133,7 +139,8 @@ public:
 		const float val)
 	{
 		SSEData[0] += val;
-		num++; numIn1++;
+		num++; 
+		numIn1++;
 	}
 
 	inline void updateSSENoShift(
@@ -168,6 +175,7 @@ private:
 	}
 };
 
+// 维护一个Nx1矩阵的累加器
 template<int i>
 class AccumulatorX
 {
@@ -192,7 +200,6 @@ public:
 		shiftUp(true);
 		num = numIn1 + numIn1k + numIn1m;
 	}
-
 
 	inline void update(const Eigen::Matrix<float, i, 1> &L, float w)
 	{
@@ -230,6 +237,7 @@ private:
 	}
 };
 
+// 计算14x14矩阵维度的Hessian矩阵
 class Accumulator14
 {
 public:
@@ -258,12 +266,14 @@ public:
 
 		int idx = 0;
 		for (int r = 0; r < 14; r++)
+		{
 			for (int c = r; c < 14; c++)
 			{
 				float d = SSEData1m[idx + 0] + SSEData1m[idx + 1] + SSEData1m[idx + 2] + SSEData1m[idx + 3];
 				H(r, c) = H(c, r) = d;
 				idx += 4;
 			}
+		}
 		assert(idx == 4 * 105);
 		num = numIn1 + numIn1k + numIn1m;
 	}
@@ -580,14 +590,20 @@ public:
 
 	inline void initialize()
 	{
+		// TODO：Data指针实际上只用了55个内存空间的量，这里为什么要申请60个内存空间
+		// 这里申请为60个内存空间的原因是因为SSE同时对4个数据进行处理，所以需要为4的倍数
 		memset(Data, 0, sizeof(float) * 60);
 		memset(Data1k, 0, sizeof(float) * 60);
 		memset(Data1m, 0, sizeof(float) * 60);
 
+		// TODO：TopRight_Data实际上只用了30个内存空间的量，这里为什么要申请32个内存空间
+		// 这里申请为32个内存空间的原因是因为SSE同时对4个数据进行处理，所以需要为4的倍数
 		memset(TopRight_Data, 0, sizeof(float) * 32);
 		memset(TopRight_Data1k, 0, sizeof(float) * 32);
 		memset(TopRight_Data1m, 0, sizeof(float) * 32);
-
+		
+		// TODO：BotRight_Data实际上只用了6个内存空间的量，这里为什么要申请8个内存空间
+		// 这里申请为60个内存空间的原因是因为SSE同时对4个数据进行处理，所以需要为4的倍数
 		memset(BotRight_Data, 0, sizeof(float) * 8);
 		memset(BotRight_Data1k, 0, sizeof(float) * 8);
 		memset(BotRight_Data1m, 0, sizeof(float) * 8);
@@ -603,19 +619,27 @@ public:
 
 		int idx = 0;
 		for (int r = 0; r < 10; r++)
+		{
 			for (int c = r; c < 10; c++)
 			{
 				H(r, c) = H(c, r) = Data1m[idx];
 				idx++;
 			}
+		}
+
+		//printf( "idx:%d\n", idx );
 
 		idx = 0;
 		for (int r = 0; r < 10; r++)
+		{
 			for (int c = 0; c < 3; c++)
 			{
 				H(r, c + 10) = H(c + 10, r) = TopRight_Data1m[idx];
 				idx++;
 			}
+		}
+
+		//printf("idx:%d\n", idx);
 
 		H(10, 10) = BotRight_Data1m[0];
 		H(10, 11) = H(11, 10) = BotRight_Data1m[1];
@@ -623,7 +647,6 @@ public:
 		H(11, 11) = BotRight_Data1m[3];
 		H(11, 12) = H(12, 11) = BotRight_Data1m[4];
 		H(12, 12) = BotRight_Data1m[5];
-
 
 		num = numIn1 + numIn1k + numIn1m;
 	}
@@ -635,7 +658,6 @@ public:
 		const float b,
 		const float c)
 	{
-
 		Data[0] += a * x[0] * x[0] + c * y[0] * y[0] + b * (x[0] * y[0] + y[0] * x[0]);
 		Data[1] += a * x[1] * x[0] + c * y[1] * y[0] + b * (x[1] * y[0] + y[1] * x[0]);
 		Data[2] += a * x[2] * x[0] + c * y[2] * y[0] + b * (x[2] * y[0] + y[2] * x[0]);
@@ -647,7 +669,6 @@ public:
 		Data[8] += a * x[8] * x[0] + c * y[8] * y[0] + b * (x[8] * y[0] + y[8] * x[0]);
 		Data[9] += a * x[9] * x[0] + c * y[9] * y[0] + b * (x[9] * y[0] + y[9] * x[0]);
 
-
 		Data[10] += a * x[1] * x[1] + c * y[1] * y[1] + b * (x[1] * y[1] + y[1] * x[1]);
 		Data[11] += a * x[2] * x[1] + c * y[2] * y[1] + b * (x[2] * y[1] + y[2] * x[1]);
 		Data[12] += a * x[3] * x[1] + c * y[3] * y[1] + b * (x[3] * y[1] + y[3] * x[1]);
@@ -658,8 +679,6 @@ public:
 		Data[17] += a * x[8] * x[1] + c * y[8] * y[1] + b * (x[8] * y[1] + y[8] * x[1]);
 		Data[18] += a * x[9] * x[1] + c * y[9] * y[1] + b * (x[9] * y[1] + y[9] * x[1]);
 
-
-
 		Data[19] += a * x[2] * x[2] + c * y[2] * y[2] + b * (x[2] * y[2] + y[2] * x[2]);
 		Data[20] += a * x[3] * x[2] + c * y[3] * y[2] + b * (x[3] * y[2] + y[3] * x[2]);
 		Data[21] += a * x[4] * x[2] + c * y[4] * y[2] + b * (x[4] * y[2] + y[4] * x[2]);
@@ -669,8 +688,6 @@ public:
 		Data[25] += a * x[8] * x[2] + c * y[8] * y[2] + b * (x[8] * y[2] + y[8] * x[2]);
 		Data[26] += a * x[9] * x[2] + c * y[9] * y[2] + b * (x[9] * y[2] + y[9] * x[2]);
 
-
-
 		Data[27] += a * x[3] * x[3] + c * y[3] * y[3] + b * (x[3] * y[3] + y[3] * x[3]);
 		Data[28] += a * x[4] * x[3] + c * y[4] * y[3] + b * (x[4] * y[3] + y[4] * x[3]);
 		Data[29] += a * x[5] * x[3] + c * y[5] * y[3] + b * (x[5] * y[3] + y[5] * x[3]);
@@ -679,8 +696,6 @@ public:
 		Data[32] += a * x[8] * x[3] + c * y[8] * y[3] + b * (x[8] * y[3] + y[8] * x[3]);
 		Data[33] += a * x[9] * x[3] + c * y[9] * y[3] + b * (x[9] * y[3] + y[9] * x[3]);
 
-
-
 		Data[34] += a * x[4] * x[4] + c * y[4] * y[4] + b * (x[4] * y[4] + y[4] * x[4]);
 		Data[35] += a * x[5] * x[4] + c * y[5] * y[4] + b * (x[5] * y[4] + y[5] * x[4]);
 		Data[36] += a * x[6] * x[4] + c * y[6] * y[4] + b * (x[6] * y[4] + y[6] * x[4]);
@@ -688,40 +703,38 @@ public:
 		Data[38] += a * x[8] * x[4] + c * y[8] * y[4] + b * (x[8] * y[4] + y[8] * x[4]);
 		Data[39] += a * x[9] * x[4] + c * y[9] * y[4] + b * (x[9] * y[4] + y[9] * x[4]);
 
-
-
 		Data[40] += a * x[5] * x[5] + c * y[5] * y[5] + b * (x[5] * y[5] + y[5] * x[5]);
 		Data[41] += a * x[6] * x[5] + c * y[6] * y[5] + b * (x[6] * y[5] + y[6] * x[5]);
 		Data[42] += a * x[7] * x[5] + c * y[7] * y[5] + b * (x[7] * y[5] + y[7] * x[5]);
 		Data[43] += a * x[8] * x[5] + c * y[8] * y[5] + b * (x[8] * y[5] + y[8] * x[5]);
 		Data[44] += a * x[9] * x[5] + c * y[9] * y[5] + b * (x[9] * y[5] + y[9] * x[5]);
 
-
 		Data[45] += a * x[6] * x[6] + c * y[6] * y[6] + b * (x[6] * y[6] + y[6] * x[6]);
 		Data[46] += a * x[7] * x[6] + c * y[7] * y[6] + b * (x[7] * y[6] + y[7] * x[6]);
 		Data[47] += a * x[8] * x[6] + c * y[8] * y[6] + b * (x[8] * y[6] + y[8] * x[6]);
 		Data[48] += a * x[9] * x[6] + c * y[9] * y[6] + b * (x[9] * y[6] + y[9] * x[6]);
 
-
 		Data[49] += a * x[7] * x[7] + c * y[7] * y[7] + b * (x[7] * y[7] + y[7] * x[7]);
 		Data[50] += a * x[8] * x[7] + c * y[8] * y[7] + b * (x[8] * y[7] + y[8] * x[7]);
 		Data[51] += a * x[9] * x[7] + c * y[9] * y[7] + b * (x[9] * y[7] + y[9] * x[7]);
-
 
 		Data[52] += a * x[8] * x[8] + c * y[8] * y[8] + b * (x[8] * y[8] + y[8] * x[8]);
 		Data[53] += a * x[9] * x[8] + c * y[9] * y[8] + b * (x[9] * y[8] + y[9] * x[8]);
 
 		Data[54] += a * x[9] * x[9] + c * y[9] * y[9] + b * (x[9] * y[9] + y[9] * x[9]);
 
-
 		num++;
 		numIn1++;
 		shiftUp(false);
 	}
 
-	/*
-	 * same as other method, just that x/y are composed of two parts, the first 4 elements are in x4/y4, the last 6 in x6/y6.
-	 */
+	// x4表示x方向像素坐标对4个相机内参值的导数
+	// x6表示x方向像素坐标对6个相机位姿值的导数
+	// y4表示y方向像素坐标对4个相机内参值的导数
+	// y6表示y方向像素坐标对6个相机位姿值的导数
+	// a表示光度残差对x方向像素坐标导数的平方(df/dx)^2
+	// b表示光度残差对x方向与y方向像素坐标导数的乘积(df/dx)*(df/dy)
+	// c表示光度残差对y方向像素坐标导数的平方(df/dy)^2
 	inline void update(
 		const float* const x4,
 		const float* const x6,
@@ -731,7 +744,6 @@ public:
 		const float b,
 		const float c)
 	{
-
 		Data[0] += a * x4[0] * x4[0] + c * y4[0] * y4[0] + b * (x4[0] * y4[0] + y4[0] * x4[0]);
 		Data[1] += a * x4[1] * x4[0] + c * y4[1] * y4[0] + b * (x4[1] * y4[0] + y4[1] * x4[0]);
 		Data[2] += a * x4[2] * x4[0] + c * y4[2] * y4[0] + b * (x4[2] * y4[0] + y4[2] * x4[0]);
@@ -743,9 +755,6 @@ public:
 		Data[8] += a * x6[4] * x4[0] + c * y6[4] * y4[0] + b * (x6[4] * y4[0] + y6[4] * x4[0]);
 		Data[9] += a * x6[5] * x4[0] + c * y6[5] * y4[0] + b * (x6[5] * y4[0] + y6[5] * x4[0]);
 
-
-
-
 		Data[10] += a * x4[1] * x4[1] + c * y4[1] * y4[1] + b * (x4[1] * y4[1] + y4[1] * x4[1]);
 		Data[11] += a * x4[2] * x4[1] + c * y4[2] * y4[1] + b * (x4[2] * y4[1] + y4[2] * x4[1]);
 		Data[12] += a * x4[3] * x4[1] + c * y4[3] * y4[1] + b * (x4[3] * y4[1] + y4[3] * x4[1]);
@@ -756,8 +765,6 @@ public:
 		Data[17] += a * x6[4] * x4[1] + c * y6[4] * y4[1] + b * (x6[4] * y4[1] + y6[4] * x4[1]);
 		Data[18] += a * x6[5] * x4[1] + c * y6[5] * y4[1] + b * (x6[5] * y4[1] + y6[5] * x4[1]);
 
-
-
 		Data[19] += a * x4[2] * x4[2] + c * y4[2] * y4[2] + b * (x4[2] * y4[2] + y4[2] * x4[2]);
 		Data[20] += a * x4[3] * x4[2] + c * y4[3] * y4[2] + b * (x4[3] * y4[2] + y4[3] * x4[2]);
 		Data[21] += a * x6[0] * x4[2] + c * y6[0] * y4[2] + b * (x6[0] * y4[2] + y6[0] * x4[2]);
@@ -767,8 +774,6 @@ public:
 		Data[25] += a * x6[4] * x4[2] + c * y6[4] * y4[2] + b * (x6[4] * y4[2] + y6[4] * x4[2]);
 		Data[26] += a * x6[5] * x4[2] + c * y6[5] * y4[2] + b * (x6[5] * y4[2] + y6[5] * x4[2]);
 
-
-
 		Data[27] += a * x4[3] * x4[3] + c * y4[3] * y4[3] + b * (x4[3] * y4[3] + y4[3] * x4[3]);
 		Data[28] += a * x6[0] * x4[3] + c * y6[0] * y4[3] + b * (x6[0] * y4[3] + y6[0] * x4[3]);
 		Data[29] += a * x6[1] * x4[3] + c * y6[1] * y4[3] + b * (x6[1] * y4[3] + y6[1] * x4[3]);
@@ -777,8 +782,6 @@ public:
 		Data[32] += a * x6[4] * x4[3] + c * y6[4] * y4[3] + b * (x6[4] * y4[3] + y6[4] * x4[3]);
 		Data[33] += a * x6[5] * x4[3] + c * y6[5] * y4[3] + b * (x6[5] * y4[3] + y6[5] * x4[3]);
 
-
-
 		Data[34] += a * x6[0] * x6[0] + c * y6[0] * y6[0] + b * (x6[0] * y6[0] + y6[0] * x6[0]);
 		Data[35] += a * x6[1] * x6[0] + c * y6[1] * y6[0] + b * (x6[1] * y6[0] + y6[1] * x6[0]);
 		Data[36] += a * x6[2] * x6[0] + c * y6[2] * y6[0] + b * (x6[2] * y6[0] + y6[2] * x6[0]);
@@ -786,38 +789,33 @@ public:
 		Data[38] += a * x6[4] * x6[0] + c * y6[4] * y6[0] + b * (x6[4] * y6[0] + y6[4] * x6[0]);
 		Data[39] += a * x6[5] * x6[0] + c * y6[5] * y6[0] + b * (x6[5] * y6[0] + y6[5] * x6[0]);
 
-
-
 		Data[40] += a * x6[1] * x6[1] + c * y6[1] * y6[1] + b * (x6[1] * y6[1] + y6[1] * x6[1]);
 		Data[41] += a * x6[2] * x6[1] + c * y6[2] * y6[1] + b * (x6[2] * y6[1] + y6[2] * x6[1]);
 		Data[42] += a * x6[3] * x6[1] + c * y6[3] * y6[1] + b * (x6[3] * y6[1] + y6[3] * x6[1]);
 		Data[43] += a * x6[4] * x6[1] + c * y6[4] * y6[1] + b * (x6[4] * y6[1] + y6[4] * x6[1]);
 		Data[44] += a * x6[5] * x6[1] + c * y6[5] * y6[1] + b * (x6[5] * y6[1] + y6[5] * x6[1]);
 
-
 		Data[45] += a * x6[2] * x6[2] + c * y6[2] * y6[2] + b * (x6[2] * y6[2] + y6[2] * x6[2]);
 		Data[46] += a * x6[3] * x6[2] + c * y6[3] * y6[2] + b * (x6[3] * y6[2] + y6[3] * x6[2]);
 		Data[47] += a * x6[4] * x6[2] + c * y6[4] * y6[2] + b * (x6[4] * y6[2] + y6[4] * x6[2]);
 		Data[48] += a * x6[5] * x6[2] + c * y6[5] * y6[2] + b * (x6[5] * y6[2] + y6[5] * x6[2]);
 
-
 		Data[49] += a * x6[3] * x6[3] + c * y6[3] * y6[3] + b * (x6[3] * y6[3] + y6[3] * x6[3]);
 		Data[50] += a * x6[4] * x6[3] + c * y6[4] * y6[3] + b * (x6[4] * y6[3] + y6[4] * x6[3]);
 		Data[51] += a * x6[5] * x6[3] + c * y6[5] * y6[3] + b * (x6[5] * y6[3] + y6[5] * x6[3]);
-
 
 		Data[52] += a * x6[4] * x6[4] + c * y6[4] * y6[4] + b * (x6[4] * y6[4] + y6[4] * x6[4]);
 		Data[53] += a * x6[5] * x6[4] + c * y6[5] * y6[4] + b * (x6[5] * y6[4] + y6[5] * x6[4]);
 
 		Data[54] += a * x6[5] * x6[5] + c * y6[5] * y6[5] + b * (x6[5] * y6[5] + y6[5] * x6[5]);
 
-
 		num++;
 		numIn1++;
 		shiftUp(false);
 	}
 
-
+	// x4表示光度残差对相机4个内参求导的值
+	// x6表示光度残差对相机6个位姿求导的值
 	inline void updateTopRight(
 		const float* const x4,
 		const float* const x6,
@@ -866,9 +864,14 @@ public:
 		TopRight_Data[27] += x6[5] * TR00 + y6[5] * TR10;
 		TopRight_Data[28] += x6[5] * TR01 + y6[5] * TR11;
 		TopRight_Data[29] += x6[5] * TR02 + y6[5] * TR12;
-
 	}
 
+	// a00表示光度误差对光度参数a的雅可比的平方(df/da)^2
+	// a01表示光度误差对光度参数a和b雅可比的乘积(df/da)*(df/db)
+	// a02表示光度误差对光度参数a的雅可比与光度残差的乘积(df/da)*r
+	// a11表示光度残差对光度参数b的雅可比的平方(df/db)^2
+	// a12表示光度残差对光度参数b的雅可比与光度残差的乘积(df/db)*r
+	// a22表示光度残差的平方r*r
 	inline void updateBotRight(
 		const float a00,
 		const float a01,
@@ -884,9 +887,6 @@ public:
 		BotRight_Data[4] += a12;
 		BotRight_Data[5] += a22;
 	}
-
-
-
 private:
 	EIGEN_ALIGN16 float Data[60];
 	EIGEN_ALIGN16 float Data1k[60];
@@ -900,9 +900,7 @@ private:
 	EIGEN_ALIGN16 float BotRight_Data1k[8];
 	EIGEN_ALIGN16 float BotRight_Data1m[8];
 
-
 	float numIn1, numIn1k, numIn1m;
-
 
 	void shiftUp(bool force)
 	{
@@ -914,7 +912,6 @@ private:
 				_mm_store_ps(TopRight_Data1k + i, _mm_add_ps(_mm_load_ps(TopRight_Data + i), _mm_load_ps(TopRight_Data1k + i)));
 			for (int i = 0; i < 8; i += 4)
 				_mm_store_ps(BotRight_Data1k + i, _mm_add_ps(_mm_load_ps(BotRight_Data + i), _mm_load_ps(BotRight_Data1k + i)));
-
 
 			numIn1k += numIn1;
 			numIn1 = 0;
@@ -941,6 +938,8 @@ private:
 	}
 };
 
+// TODO：函数shiftUp强行将SSEData参数中存储的值转移到SSEDatalm中
+// 并且在最终取得Hessian的计算结果时从SSEDatalm中取得，为什么要强行做这样一次shift操作
 class Accumulator9
 {
 public:
@@ -950,6 +949,8 @@ public:
 	Vec9f b;
 	size_t num;
 
+	// 初始化SSEData，SSE一次计算4个浮点数，因此将9x9的矩阵初始化为具有4*45个
+	// 浮点数的指针，每4个浮点数记录一个矩阵元素的和
 	inline void initialize()
 	{
 		H.setZero();
@@ -967,18 +968,21 @@ public:
 		assert(numIn1 == 0);
 		assert(numIn1k == 0);
 
+		// 求解Hessians时只计算了矩阵的右上角元素
 		int idx = 0;
 		for (int r = 0; r < 9; r++)
+		{
 			for (int c = r; c < 9; c++)
 			{
 				float d = SSEData1m[idx + 0] + SSEData1m[idx + 1] + SSEData1m[idx + 2] + SSEData1m[idx + 3];
 				H(r, c) = H(c, r) = d;
 				idx += 4;
 			}
+		}
 		assert(idx == 4 * 45);
 	}
 
-
+	// 对雅可比矩阵求解得到Hessians矩阵
 	inline void updateSSE(
 		const __m128 J0, const __m128 J1,
 		const __m128 J2, const __m128 J3,
@@ -1046,6 +1050,7 @@ public:
 		shiftUp(false);
 	}
 
+	// 对雅可比矩阵求解得到Hessians矩阵（加权形式）
 	inline void updateSSE_eighted(
 		const __m128 J0, const __m128 J1,
 		const __m128 J2, const __m128 J3,
@@ -1123,6 +1128,7 @@ public:
 		shiftUp(false);
 	}
 
+	// 对雅可比处理得到Hessians矩阵，并没有使用SSE求解
 	inline void updateSingle(
 		const float J0, const float J1,
 		const float J2, const float J3,
@@ -1141,7 +1147,6 @@ public:
 		*pt += J7 * J0; pt += 4;
 		*pt += J8 * J0; pt += 4;
 
-
 		*pt += J1 * J1; pt += 4;
 		*pt += J2 * J1; pt += 4;
 		*pt += J3 * J1; pt += 4;
@@ -1151,7 +1156,6 @@ public:
 		*pt += J7 * J1; pt += 4;
 		*pt += J8 * J1; pt += 4;
 
-
 		*pt += J2 * J2; pt += 4;
 		*pt += J3 * J2; pt += 4;
 		*pt += J4 * J2; pt += 4;
@@ -1160,14 +1164,12 @@ public:
 		*pt += J7 * J2; pt += 4;
 		*pt += J8 * J2; pt += 4;
 
-
 		*pt += J3 * J3; pt += 4;
 		*pt += J4 * J3; pt += 4;
 		*pt += J5 * J3; pt += 4;
 		*pt += J6 * J3; pt += 4;
 		*pt += J7 * J3; pt += 4;
 		*pt += J8 * J3; pt += 4;
-
 
 		*pt += J4 * J4; pt += 4;
 		*pt += J5 * J4; pt += 4;
@@ -1180,11 +1182,9 @@ public:
 		*pt += J7 * J5; pt += 4;
 		*pt += J8 * J5; pt += 4;
 
-
 		*pt += J6 * J6; pt += 4;
 		*pt += J7 * J6; pt += 4;
 		*pt += J8 * J6; pt += 4;
-
 
 		*pt += J7 * J7; pt += 4;
 		*pt += J8 * J7; pt += 4;
@@ -1196,6 +1196,7 @@ public:
 		shiftUp(false);
 	}
 
+	// 对雅可比处理得到Hessians矩阵，并没有使用SSE求解，但是对值进行了加权
 	inline void updateSingleWeighted(
 		float J0, float J1,
 		float J2, float J3,
@@ -1204,7 +1205,6 @@ public:
 		float J8, float w,
 		int off = 0)
 	{
-
 		float* pt = SSEData + off;
 		*pt += J0 * J0*w; pt += 4; J0 *= w;
 		*pt += J1 * J0; pt += 4;
@@ -1216,7 +1216,6 @@ public:
 		*pt += J7 * J0; pt += 4;
 		*pt += J8 * J0; pt += 4;
 
-
 		*pt += J1 * J1*w; pt += 4; J1 *= w;
 		*pt += J2 * J1; pt += 4;
 		*pt += J3 * J1; pt += 4;
@@ -1226,7 +1225,6 @@ public:
 		*pt += J7 * J1; pt += 4;
 		*pt += J8 * J1; pt += 4;
 
-
 		*pt += J2 * J2*w; pt += 4; J2 *= w;
 		*pt += J3 * J2; pt += 4;
 		*pt += J4 * J2; pt += 4;
@@ -1235,14 +1233,12 @@ public:
 		*pt += J7 * J2; pt += 4;
 		*pt += J8 * J2; pt += 4;
 
-
 		*pt += J3 * J3*w; pt += 4; J3 *= w;
 		*pt += J4 * J3; pt += 4;
 		*pt += J5 * J3; pt += 4;
 		*pt += J6 * J3; pt += 4;
 		*pt += J7 * J3; pt += 4;
 		*pt += J8 * J3; pt += 4;
-
 
 		*pt += J4 * J4*w; pt += 4; J4 *= w;
 		*pt += J5 * J4; pt += 4;
@@ -1255,11 +1251,9 @@ public:
 		*pt += J7 * J5; pt += 4;
 		*pt += J8 * J5; pt += 4;
 
-
 		*pt += J6 * J6*w; pt += 4; J6 *= w;
 		*pt += J7 * J6; pt += 4;
 		*pt += J8 * J6; pt += 4;
-
 
 		*pt += J7 * J7*w; pt += 4; J7 *= w;
 		*pt += J8 * J7; pt += 4;

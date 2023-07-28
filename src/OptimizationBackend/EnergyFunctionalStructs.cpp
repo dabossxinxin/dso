@@ -36,8 +36,6 @@ namespace dso
 {
 	void EFResidual::takeDataF()
 	{
-		// TODO
-		//std::swap<RawResidualJacobian*>(J, data->J);
 		RawResidualJacobian* tmp = J;
 		J = data->J;
 		data->J = tmp;

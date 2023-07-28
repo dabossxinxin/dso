@@ -29,8 +29,8 @@
 
 #include "util/globalCalib.h"
 #include "util/NumType.h"
-#include "FullSystem/Residuals.h"
 #include "util/ImageAndExposure.h"
+#include "FullSystem/Residuals.h"
 
 namespace dso
 {
@@ -121,9 +121,9 @@ namespace dso
 		std::vector<PointHessian*> pointHessiansOut;			// contains all OUTLIER points (= discarded.).
 		std::vector<ImmaturePoint*> immaturePoints;				// contains all OUTLIER points (= discarded.).
 
-		Mat66 nullspaces_pose;
-		Mat42 nullspaces_affine;
-		Vec6 nullspaces_scale;
+		Mat66 nullspaces_pose;		// 帧位姿的零空间矩阵
+		Mat42 nullspaces_affine;	// 帧光度参数的零空间矩阵
+		Vec6 nullspaces_scale;		// 帧尺度参数的零空间矩阵
 
 		// variable info.
 		SE3 worldToCam_evalPT;
@@ -183,9 +183,10 @@ namespace dso
 			PRE_camToWorld = PRE_worldToCam.inverse();
 			//setCurrentNullspace();
 		};
+
+		// 设置线性化点：EvalPT表示evaluate point
 		inline void setEvalPT(const SE3 &worldToCam_evalPT, const Vec10 &state)
 		{
-
 			this->worldToCam_evalPT = worldToCam_evalPT;
 			setState(state);
 			setStateZero(state);

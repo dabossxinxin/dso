@@ -76,9 +76,11 @@ namespace dso
 
 		if (state_state == ResState::OOB)
 		{
-			state_NewState = ResState::OOB; return state_energy;
+			state_NewState = ResState::OOB;
+			return state_energy;
 		}
 
+		// 获取当前关键点主帧与目标帧之间的相对位姿关系
 		FrameFramePrecalc* precalc = &(host->targetPrecalc[target->idx]);
 		float energyLeft = 0;
 		const Eigen::Vector3f* dIl = target->dI;
@@ -93,32 +95,30 @@ namespace dso
 		Vec2f affLL = precalc->PRE_aff_mode;
 		float b0 = precalc->PRE_b0_mode;
 
-
-		Vec6f d_xi_x, d_xi_y;
-		Vec4f d_C_x, d_C_y;
-		float d_d_x, d_d_y;
+		Vec6f d_xi_x, d_xi_y;	// 位姿
+		Vec4f d_C_x, d_C_y;		// 相机内参
+		float d_d_x, d_d_y;		// 逆深度
 		{
-			float drescale, u, v, new_idepth;
-			float Ku, Kv;
-			Vec3f KliP;
+			float drescale;
+			float u, v;			// 目标帧归一化相机系下横纵坐标
+			float new_idepth;	// 在目标帧中的逆深度值
+			float Ku, Kv;		// 在目标帧中投影的像素坐标
+			Vec3f KliP;			// 主帧下的归一化相机系下坐标
 
 			if (!projectPoint(point->u, point->v, point->idepth_zero_scaled, 0, 0, HCalib,
 				PRE_RTll_0, PRE_tTll_0, drescale, u, v, Ku, Kv, KliP, new_idepth))
 			{
-				state_NewState = ResState::OOB; return state_energy;
+				state_NewState = ResState::OOB;
+				return state_energy;
 			}
 
 			centerProjectedTo = Vec3f(Ku, Kv, new_idepth);
 
-
-			// diff d_idepth
+			// 计算像素坐标对逆深度的导数
 			d_d_x = drescale * (PRE_tTll_0[0] - PRE_tTll_0[2] * u)*SCALE_IDEPTH*HCalib->fxl();
 			d_d_y = drescale * (PRE_tTll_0[1] - PRE_tTll_0[2] * v)*SCALE_IDEPTH*HCalib->fyl();
 
-
-
-
-			// diff calib
+			// 计算像素坐标对相机内参的导数
 			d_C_x[2] = drescale * (PRE_RTll_0(2, 0)*u - PRE_RTll_0(0, 0));
 			d_C_x[3] = HCalib->fxl() * drescale*(PRE_RTll_0(2, 1)*u - PRE_RTll_0(0, 1)) * HCalib->fyli();
 			d_C_x[0] = KliP[0] * d_C_x[2];
@@ -139,7 +139,7 @@ namespace dso
 			d_C_y[2] *= SCALE_C;
 			d_C_y[3] = (d_C_y[3] + 1)*SCALE_C;
 
-
+			// 计算像素坐标关于相机位姿的导数
 			d_xi_x[0] = new_idepth * HCalib->fxl();
 			d_xi_x[1] = 0;
 			d_xi_x[2] = -new_idepth * u*HCalib->fxl();
@@ -155,7 +155,6 @@ namespace dso
 			d_xi_y[5] = u * HCalib->fyl();
 		}
 
-
 		{
 			J->Jpdxi[0] = d_xi_x;
 			J->Jpdxi[1] = d_xi_y;
@@ -165,7 +164,6 @@ namespace dso
 
 			J->Jpdd[0] = d_d_x;
 			J->Jpdd[1] = d_d_y;
-
 		}
 
 		float JIdxJIdx_00 = 0, JIdxJIdx_11 = 0, JIdxJIdx_10 = 0;
@@ -185,11 +183,8 @@ namespace dso
 			projectedTo[idx][0] = Ku;
 			projectedTo[idx][1] = Kv;
 
-
 			Vec3f hitColor = (getInterpolatedElement33(dIl, Ku, Kv, wG[0]));
 			float residual = hitColor[0] - (float)(affLL[0] * color[idx] + affLL[1]);
-
-
 
 			float drdA = (color[idx] - b0);
 			if (!std::isfinite((float)hitColor[0]))
@@ -197,11 +192,10 @@ namespace dso
 				state_NewState = ResState::OOB; return state_energy;
 			}
 
-
+			// 基于像素梯度设置权重像素梯度越大权重越小
+			// 表示的基本原则为像素梯度大的关键点变化会带来较大的残差变化
 			float w = sqrtf(setting_outlierTHSumComponent / (setting_outlierTHSumComponent + hitColor.tail<2>().squaredNorm()));
 			w = 0.5f*(w + weights[idx]);
-
-
 
 			float hw = fabsf(residual) < setting_huberTH ? 1 : setting_huberTH / fabsf(residual);
 			energyLeft += w * w*hw *residual*residual*(2 - hw);
@@ -233,12 +227,10 @@ namespace dso
 				JabJab_01 += drdA * hw*hw;
 				JabJab_11 += hw * hw;
 
-
 				wJI2_sum += hw * hw*(hitColor[1] * hitColor[1] + hitColor[2] * hitColor[2]);
 
 				if (setting_affineOptModeA < 0) J->JabF[0][idx] = 0;
 				if (setting_affineOptModeB < 0) J->JabF[1][idx] = 0;
-
 			}
 		}
 
@@ -270,8 +262,6 @@ namespace dso
 		state_NewEnergy = energyLeft;
 		return energyLeft;
 	}
-
-
 
 	void PointFrameResidual::debugPlot()
 	{

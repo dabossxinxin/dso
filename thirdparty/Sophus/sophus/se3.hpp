@@ -129,13 +129,13 @@ public:
    */
   inline
   const Adjoint Adj() const {
-    const Matrix<Scalar,3,3> & R = so3().matrix();
-    Adjoint res;
-    res.block(0,0,3,3) = R;
-    res.block(3,3,3,3) = R;
-    res.block(0,3,3,3) = SO3Group<Scalar>::hat(translation())*R;
-    res.block(3,0,3,3) = Matrix<Scalar,3,3>::Zero(3,3);
-    return res;
+	const Matrix<Scalar, 3, 3> & R = so3().matrix();
+	Adjoint res;
+	res.block(0, 0, 3, 3) = R;
+	res.block(3, 3, 3, 3) = R;
+	res.block(0, 3, 3, 3) = SO3Group<Scalar>::hat(translation())*R;
+	res.block(3, 0, 3, 3) = Matrix<Scalar, 3, 3>::Zero(3, 3);
+	return res;
   }
 
   /**

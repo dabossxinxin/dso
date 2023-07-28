@@ -58,7 +58,6 @@ namespace dso
 						Vec3f ptp = ptp_inf + r->host->targetPrecalc[r->target->idx].PRE_KtTll*p->idepth_scaled;	// projected point with real depth.
 						float relBS = 0.01*((ptp_inf.head<2>() / ptp_inf[2]) - (ptp.head<2>() / ptp[2])).norm();	// 0.01 = one pixel.
 
-
 						if (relBS > p->maxRelBaseline)
 							p->maxRelBaseline = relBS;
 
@@ -81,25 +80,24 @@ namespace dso
 
 	void FullSystem::setNewFrameEnergyTH()
 	{
-
 		// collect all residuals and make decision on TH.
 		allResVec.clear();
 		allResVec.reserve(activeResiduals.size() * 2);
 		FrameHessian* newFrame = frameHessians.back();
 
 		for (PointFrameResidual* r : activeResiduals)
+		{
 			if (r->state_NewEnergyWithOutlier >= 0 && r->target == newFrame)
 			{
 				allResVec.emplace_back(r->state_NewEnergyWithOutlier);
-
 			}
+		}
 
 		if (allResVec.size() == 0)
 		{
 			newFrame->frameEnergyTH = 12 * 12 * patternNum;
-			return;		// should never happen, but lets make sure.
+			return;
 		}
-
 
 		int nthIdx = setting_frameEnergyTHN * allResVec.size();
 
@@ -146,6 +144,7 @@ namespace dso
 
 		if (fixLinearization)
 		{
+			// 前面线性化时，apply之后更新了state_state，所以此时如果有相同的那么也要更新一下state
 			for (PointFrameResidual* r : activeResiduals)
 			{
 				PointHessian* ph = r->point;
@@ -155,6 +154,7 @@ namespace dso
 					ph->lastResiduals[1].second = r->state_state;
 			}
 
+			// residual创建时一同创建此时再去掉不好的残差
 			int nResRemoved = 0;
 			for (int i = 0; i < NUM_THREADS; i++)
 			{
@@ -162,11 +162,13 @@ namespace dso
 				{
 					PointHessian* ph = r->point;
 
+					// 删掉不好的lastResiduals
 					if (ph->lastResiduals[0].first == r)
 						ph->lastResiduals[0].first = 0;
 					else if (ph->lastResiduals[1].first == r)
 						ph->lastResiduals[1].first = 0;
 
+					// energyfunction以及residuals中删除掉不好的残差
 					for (unsigned int k = 0; k < ph->residuals.size(); k++)
 					{
 						if (ph->residuals[k] == r)
@@ -361,34 +363,41 @@ namespace dso
 
 	float FullSystem::optimize(int mnumOptIts)
 	{
+		// 刚初始化成功时需要对关键帧姿态以及关键点逆深度充分优化
 		if (frameHessians.size() < 2) return 0;
 		if (frameHessians.size() < 3) mnumOptIts = 20;
 		if (frameHessians.size() < 4) mnumOptIts = 15;
 
-		// get statistics and active residuals.
-
+		// 判断两帧之间的残差是否线性化，每次边缘化完成后边缘化的点已经被抛弃
+		// 因此剩下的都是未线性化的点都会加入到activeResiduals中
+		// 实际上加入的残差包含两部分:1、旧成熟点在新关键帧上的残差，2、新成熟点在旧关键帧上的残差
 		activeResiduals.clear();
 		int numPoints = 0;
 		int numLRes = 0;
 		for (FrameHessian* fh : frameHessians)
+		{
 			for (PointHessian* ph : fh->pointHessians)
 			{
 				for (PointFrameResidual* r : ph->residuals)
 				{
-					if (!r->efResidual->isLinearized)
+					if (!r->efResidual->isLinearized)		// 若没有线性化的点准备线性化
 					{
-						activeResiduals.emplace_back(r);
-						r->resetOOB();
+						activeResiduals.emplace_back(r);	// 残差加入准备线性化
+						r->resetOOB();						// 重置residual状态
 					}
 					else
-						numLRes++;
+						numLRes++;							// 已经线性化过的点计数
 				}
 				numPoints++;
 			}
+		}
 
 		if (!setting_debugout_runquiet)
 			printf("OPTIMIZE %d pts, %d active res, %d lin res!\n", ef->nPoints, (int)activeResiduals.size(), numLRes);
 
+		// 线性化
+		// 参数为true时进行固定线性化并去掉不好的残差
+		// 参数为false时进行不固定的线性化
 		Vec3 lastEnergy = linearizeAll(false);
 		double lastEnergyL = calcLEnergy();
 		double lastEnergyM = calcMEnergy();
@@ -411,9 +420,10 @@ namespace dso
 		VecX previousX = VecX::Constant(CPARS + 8 * frameHessians.size(), NAN);
 		for (int iteration = 0; iteration < mnumOptIts; iteration++)
 		{
-			// solve!
+			// 备份当前各个状态的值以防能量未出现下降的情况
 			backupState(iteration != 0);
 			//solveSystemNew(0);
+			// 求解滑窗优化问题的增量方程包含有位姿、相机内参以及所有点深度值的增量
 			solveSystem(iteration, lambda);
 			double incDirChange = (1e-20 + previousX.dot(ef->lastX)) / (1e-20 + previousX.norm() * ef->lastX.norm());
 			previousX = ef->lastX;
@@ -428,9 +438,12 @@ namespace dso
 				if (stepsize < 0.25) stepsize = 0.25;
 			}
 
+			// 更新变量判断是否停止迭代
+			// 用增量更新关键帧窗口中的各项状态值如位姿、光度参数、内参以及点的逆深度等
+			// setPrecalcValues将两帧之间的优化前后状态值(不包括点的逆深度)都存储一遍，然后计算一遍状态量的增量
 			bool canbreak = doStepFromBackup(stepsize, stepsize, stepsize, stepsize, stepsize);
 
-			// eval new energy!
+			// 用上面计算得到的新的状态量计算一次新的残差以及偏导数等
 			Vec3 newEnergy = linearizeAll(false);
 			double newEnergyL = calcLEnergy();
 			double newEnergyM = calcMEnergy();
@@ -447,6 +460,7 @@ namespace dso
 				printOptRes(newEnergy, newEnergyL, newEnergyM, 0, 0, frameHessians.back()->aff_g2l().a, frameHessians.back()->aff_g2l().b);
 			}
 
+			// 如果残差小于原来的残差值那么接受此次迭代并再次调用applyRes_Reductor,调整lambda值加速收敛
 			if (setting_forceAceptStep || (newEnergy[0] + newEnergy[1] + newEnergyL + newEnergyM <
 				lastEnergy[0] + lastEnergy[1] + lastEnergyL + lastEnergyM))
 			{
@@ -474,16 +488,18 @@ namespace dso
 			if (canbreak && iteration >= setting_minOptIterations) break;
 		}
 
+		// 设置最新一帧的位姿额线性化点，0~5为位姿增量因此为0，6~7是光度参数
+		// TODO：这里对最后一帧的光度参数做了特别的操作，为什么呢？
 		Vec10 newStateZero = Vec10::Zero();
 		newStateZero.segment<2>(6) = frameHessians.back()->get_state().segment<2>(6);
+		frameHessians.back()->setEvalPT(frameHessians.back()->PRE_worldToCam, newStateZero);
 
-		frameHessians.back()->setEvalPT(frameHessians.back()->PRE_worldToCam,
-			newStateZero);
-		EFDeltaValid = false;
-		EFAdjointsValid = false;
-		ef->setAdjointsF(&Hcalib);
-		setPrecalcValues();
+		EFDeltaValid = false;		// 表示delta是否计算完成的标志，ef->setDeltaF后置为true
+		EFAdjointsValid = false;	// 表示adjoint是否计算完成的标志，ef->setAdjointsF后置为true
+		ef->setAdjointsF(&Hcalib);	// 重新计算Adjoint Matrix，为将绝对值转化为相对值做准备
+		setPrecalcValues();			// 更新状态量增量
 
+		// 计算优化之后的能量，此时调用linearizeAll函数是为了删除一些不合理点带着的残差项
 		lastEnergy = linearizeAll(true);
 
 		if (!std::isfinite((double)lastEnergy[0]) || !std::isfinite((double)lastEnergy[1]) || !std::isfinite((double)lastEnergy[2]))
@@ -503,6 +519,7 @@ namespace dso
 			calibLog->flush();
 		}
 
+		// 将优化后的结果给shell
 		{
 			boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
 			for (FrameHessian* fh : frameHessians)
@@ -519,12 +536,14 @@ namespace dso
 
 	void FullSystem::solveSystem(int iteration, double lambda)
 	{
+		// 零空间申请
 		ef->lastNullspaces_forLogging = getNullspaces(
 			ef->lastNullspaces_pose,
 			ef->lastNullspaces_scale,
 			ef->lastNullspaces_affA,
 			ef->lastNullspaces_affB);
 
+		// 真正求解增量方程的函数
 		ef->solveSystemF(iteration, lambda, &Hcalib);
 	}
 
@@ -578,7 +597,7 @@ namespace dso
 		int n = CPARS + frameHessians.size() * 8;
 		std::vector<VecX> nullspaces_x0_pre;
 
-		// 获取每一帧相机姿态的零空间
+		// 获取滑窗中所有帧位姿的零空间矩阵
 		for (int i = 0; i < 6; i++)
 		{
 			VecX nullspace_x0(n);

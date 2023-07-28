@@ -33,7 +33,9 @@
 
 namespace dso
 {
-
+	// mode == 0: active
+	// mode == 1: linearized
+	// mode == 2: marginalize
 	template<int mode>
 	void AccumulatedTopHessianSSE::addPoint(EFPoint* p, EnergyFunctional const * const ef, int tid)	// 0 = active, 1 = linearized, 2=marginalize
 	{
@@ -62,7 +64,7 @@ namespace dso
 				assert(r->isLinearized);
 			}
 
-
+			// 维护了一个(nFrames*13)*(nFrames*13)结构的滑窗中所有帧参与的大Hessians矩阵
 			RawResidualJacobian* rJ = r->J;
 			int htIDX = r->hostIDX + r->targetIDX*nframes[tid];
 			Mat18f dp = ef->adHTdeltaF[htIDX];
@@ -105,23 +107,34 @@ namespace dso
 				rr += resApprox[i] * resApprox[i];
 			}
 
-
+			// 更新点p当前遍历到的残差的Hessian矩阵
+			// 更新的是Hessian矩阵的关于相机内参以及相机位姿的部分
+			// H =	[Hcc Hcf]
+			//		[Hfc Hff]	10x10
 			acc[tid][htIDX].update(
 				rJ->Jpdc[0].data(), rJ->Jpdxi[0].data(),
 				rJ->Jpdc[1].data(), rJ->Jpdxi[1].data(),
 				rJ->JIdx2(0, 0), rJ->JIdx2(0, 1), rJ->JIdx2(1, 1));
 
+			// 更新点p当前遍历到的残差的Hessian矩阵
+			// 更新的是Hessian矩阵的关于相机光度参数以及残差的部分
+			//		[Haa	Hab		Ja*r]
+			// H =	[Hba	Hbb		Jb*r]
+			//		[r*Ja	r*Jb	r*r]	3x3
 			acc[tid][htIDX].updateBotRight(
 				rJ->Jab2(0, 0), rJ->Jab2(0, 1), Jab_r[0],
 				rJ->Jab2(1, 1), Jab_r[1], rr);
 
+			// 更新点p当前遍历到的残差的Hessian矩阵
+			// 更新的是Hessian矩阵的关于相机光度参数、残差与相机内参、位姿的协方差部分
+			// H =	[Hca	Hcb	Jc*r]
+			//		[Hfa	Hfb	Jf*r]	10x3
 			acc[tid][htIDX].updateTopRight(
 				rJ->Jpdc[0].data(), rJ->Jpdxi[0].data(),
 				rJ->Jpdc[1].data(), rJ->Jpdxi[1].data(),
 				rJ->JabJIdx(0, 0), rJ->JabJIdx(0, 1),
 				rJ->JabJIdx(1, 0), rJ->JabJIdx(1, 1),
 				JI_r[0], JI_r[1]);
-
 
 			Vec2f Ji2_Jpdd = rJ->JIdx2 * rJ->Jpdd;
 			bd_acc += JI_r[0] * rJ->Jpdd[0] + JI_r[1] * rJ->Jpdd[1];
@@ -159,7 +172,6 @@ namespace dso
 	{
 		H = MatXX::Zero(nframes[tid] * 8 + CPARS, nframes[tid] * 8 + CPARS);
 		b = VecX::Zero(nframes[tid] * 8 + CPARS);
-
 
 		for (int h = 0; h < nframes[tid]; h++)
 			for (int t = 0; t < nframes[tid]; t++)
@@ -275,7 +287,6 @@ namespace dso
 			{
 				H[tid].diagonal().segment<8>(CPARS + h * 8) += EF->frames[h]->prior;
 				b[tid].segment<8>(CPARS + h * 8) += EF->frames[h]->prior.cwiseProduct(EF->frames[h]->delta_prior);
-
 			}
 		}
 	}
