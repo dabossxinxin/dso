@@ -174,10 +174,11 @@ namespace dso
 		b = VecX::Zero(nframes[tid] * 8 + CPARS);
 
 		for (int h = 0; h < nframes[tid]; h++)
+		{
 			for (int t = 0; t < nframes[tid]; t++)
 			{
-				int hIdx = CPARS + h * 8;
-				int tIdx = CPARS + t * 8;
+				int hIdx = CPARS + h * 8;	// 列
+				int tIdx = CPARS + t * 8;	// 行
 				int aidx = h + nframes[tid] * t;
 
 				acc[tid][aidx].finish();
@@ -185,24 +186,19 @@ namespace dso
 
 				MatPCPC accH = acc[tid][aidx].H.cast<double>();
 
+				// 光度残差相对于h-t之间的位姿变换的Jacobian转换光度残差相对于host位姿的Jacobian以及光度残差相对于target的Jacobian
 				H.block<8, 8>(hIdx, hIdx).noalias() += EF->adHost[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adHost[aidx].transpose();
-
 				H.block<8, 8>(tIdx, tIdx).noalias() += EF->adTarget[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adTarget[aidx].transpose();
-
 				H.block<8, 8>(hIdx, tIdx).noalias() += EF->adHost[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adTarget[aidx].transpose();
-
 				H.block<8, CPARS>(hIdx, 0).noalias() += EF->adHost[aidx] * accH.block<8, CPARS>(CPARS, 0);
-
 				H.block<8, CPARS>(tIdx, 0).noalias() += EF->adTarget[aidx] * accH.block<8, CPARS>(CPARS, 0);
-
 				H.topLeftCorner<CPARS, CPARS>().noalias() += accH.block<CPARS, CPARS>(0, 0);
 
 				b.segment<8>(hIdx).noalias() += EF->adHost[aidx] * accH.block<8, 1>(CPARS, 8 + CPARS);
-
 				b.segment<8>(tIdx).noalias() += EF->adTarget[aidx] * accH.block<8, 1>(CPARS, 8 + CPARS);
-
 				b.head<CPARS>().noalias() += accH.block<CPARS, 1>(0, 8 + CPARS);
 			}
+		}
 
 		// ----- new: copy transposed parts.
 		for (int h = 0; h < nframes[tid]; h++)
@@ -213,6 +209,8 @@ namespace dso
 			for (int t = h + 1; t < nframes[tid]; t++)
 			{
 				int tIdx = CPARS + t * 8;
+				// TODO：这一行是不是没有用的,左下角的矩阵块实际上为0，不需要加到对称的右上角的矩阵块上
+				// 解答：实际上得到的左下角矩阵并不为零矩阵，上面代码里面给(hIdx,tIdx)部分赋值，这部分矩阵可能在右上角也可能在左下角
 				H.block<8, 8>(hIdx, tIdx).noalias() += H.block<8, 8>(tIdx, hIdx).transpose();
 				H.block<8, 8>(tIdx, hIdx).noalias() = H.block<8, 8>(hIdx, tIdx).transpose();
 			}
@@ -260,25 +258,23 @@ namespace dso
 			}
 
 			H[tid].block<8, 8>(hIdx, hIdx).noalias() += EF->adHost[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adHost[aidx].transpose();
-
 			H[tid].block<8, 8>(tIdx, tIdx).noalias() += EF->adTarget[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adTarget[aidx].transpose();
-
 			H[tid].block<8, 8>(hIdx, tIdx).noalias() += EF->adHost[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adTarget[aidx].transpose();
-
 			H[tid].block<8, CPARS>(hIdx, 0).noalias() += EF->adHost[aidx] * accH.block<8, CPARS>(CPARS, 0);
-
 			H[tid].block<8, CPARS>(tIdx, 0).noalias() += EF->adTarget[aidx] * accH.block<8, CPARS>(CPARS, 0);
-
 			H[tid].topLeftCorner<CPARS, CPARS>().noalias() += accH.block<CPARS, CPARS>(0, 0);
 
 			b[tid].segment<8>(hIdx).noalias() += EF->adHost[aidx] * accH.block<8, 1>(CPARS, CPARS + 8);
-
 			b[tid].segment<8>(tIdx).noalias() += EF->adTarget[aidx] * accH.block<8, 1>(CPARS, CPARS + 8);
-
 			b[tid].head<CPARS>().noalias() += accH.block<CPARS, 1>(0, CPARS + 8);
 		}
 
-		// only do this on one thread.
+		// 检查构造的Hessian
+		/*Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> tmp = H->transpose();
+		cv::Mat HImage = cv::Mat::zeros(H->rows(), H->cols(), CV_64FC1);
+		memcpy(HImage.data, tmp.data(), H->rows()*H->cols() * sizeof(double));*/
+
+		// 只在单线程的到时候会调用这部分代码
 		if (min == 0 && usePrior)
 		{
 			H[tid].diagonal().head<CPARS>() += EF->cPrior;

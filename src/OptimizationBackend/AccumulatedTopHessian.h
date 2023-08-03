@@ -20,16 +20,18 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
 #pragma once
 
- 
-#include "util/NumType.h"
-#include "OptimizationBackend/MatrixAccumulators.h"
 #include "vector"
 #include <math.h>
+
+#include "util/NumType.h"
 #include "util/IndexThreadReduce.h"
+#include "OptimizationBackend/MatrixAccumulators.h"
+
+#include <opencv2/opencv.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 namespace dso
 {
@@ -83,6 +85,7 @@ namespace dso
 
 		template<int mode> void addPoint(EFPoint* p, EnergyFunctional const * const ef, int tid = 0);
 
+		// 累加滑窗中所有帧之间相对位姿构造的Hessian得到大Hessian矩阵
 		void stitchDoubleMT(IndexThreadReduce<Vec10>* red, MatXX &H, VecX &b, EnergyFunctional const * const EF, bool usePrior, bool MT)
 		{
 			// sum up, splitting by bock in square.
@@ -100,7 +103,7 @@ namespace dso
 				red->reduce(boost::bind(&AccumulatedTopHessianSSE::stitchDoubleInternal,
 					this, Hs, bs, EF, usePrior, _1, _2, _3, _4), 0, nframes[0] * nframes[0], 0);
 
-				// sum up results
+				// 累加多线程计算得到的Hessian
 				H = Hs[0];
 				b = bs[0];
 
@@ -118,7 +121,12 @@ namespace dso
 				stitchDoubleInternal(&H, &b, EF, usePrior, 0, nframes[0] * nframes[0], 0, -1);
 			}
 
-			// make diagonal by copying over parts.
+			// 检查Hessian矩阵
+			//Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> HTran = H.transpose();
+			//cv::Mat HImage = cv::Mat::zeros(H.rows(), H.cols(), CV_64FC1);
+			//memcpy(HImage.data, HTran.data(), H.rows()*H.cols() * sizeof(double));
+
+			// 以上代码得到的Hessian是部分Hessian，下面根据Hessian矩阵的对称性得到完整Hessian
 			for (int h = 0; h < nframes[0]; h++)
 			{
 				int hIdx = CPARS + h * 8;
@@ -127,10 +135,15 @@ namespace dso
 				for (int t = h + 1; t < nframes[0]; t++)
 				{
 					int tIdx = CPARS + t * 8;
+					// 这里多一步加法运算是因为上面代码得到的Hessians并不是对称结构
 					H.block<8, 8>(hIdx, tIdx).noalias() += H.block<8, 8>(tIdx, hIdx).transpose();
 					H.block<8, 8>(tIdx, hIdx).noalias() = H.block<8, 8>(hIdx, tIdx).transpose();
 				}
 			}
+
+			// 检查Hessians矩阵
+			//HTran = H.transpose();
+			//memcpy(HImage.data, HTran.data(), H.rows()*H.cols() * sizeof(double));
 		}
 
 		int nframes[NUM_THREADS];

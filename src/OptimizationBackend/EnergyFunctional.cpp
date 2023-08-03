@@ -38,18 +38,13 @@ namespace dso
 	bool EFIndicesValid = false;
 	bool EFDeltaValid = false;
 
+	// 当滑窗内的帧发生变更时，滑窗优化函数中维护的host帧与target帧的伴随矩阵也要随之变化
 	void EnergyFunctional::setAdjointsF(CalibHessian* Hcalib)
 	{
-		if (adHost != 0)
-		{
-			delete[] adHost;
-			adHost = NULL;
-		}
-		if (adTarget != 0)
-		{
-			delete[] adTarget;
-			adTarget = NULL;
-		}	
+		// 1、将之前的伴随矩阵指针全部清空，并根据滑窗中的帧数量重新分配变量内存空间
+		if (adHost != 0) delete[] adHost;
+		if (adTarget != 0) delete[] adTarget;
+
 		adHost = new Mat88[nFrames*nFrames];
 		adTarget = new Mat88[nFrames*nFrames];
 
@@ -65,15 +60,23 @@ namespace dso
 				Mat88 AH = Mat88::Identity();
 				Mat88 AT = Mat88::Identity();
 
+				// host->target相对位姿对host位姿的导数为两者之间相对位姿的负伴随矩阵
 				AH.topLeftCorner<6, 6>() = -hostToTarget.Adj().transpose();
+				// host->target相对位姿对target位姿的导数为6x6的单位矩阵
 				AT.topLeftCorner<6, 6>() = Mat66::Identity();
 
+				// 之前求解的都是光度残差相对与两帧之间的相对光度参数的导数
+				// 需要通过伴随矩阵转换为光度残差相对于host以及target帧光度参数的导数
+				// 因此下面代码实际求解的是相对光度参数对host以及target绝对光度参数的导数
 				Vec2f affLL = AffLight::fromToVecExposure(host->ab_exposure, target->ab_exposure, host->aff_g2l_0(), target->aff_g2l_0()).cast<float>();
 				AT(6, 6) = -affLL[0];
 				AH(6, 6) = affLL[0];
 				AT(7, 7) = -1;
 				AH(7, 7) = affLL[0];
 
+				// 这里应该是为了避免各个参数之间数值差异过大而设置的尺度参数
+				// 通过这个尺度参数可以将保证后续滑窗系统大Hessians矩阵求逆精度更高
+				// TODO：后面这里去掉看看Hessian矩阵的求逆精度是否有降低
 				AH.block<3, 8>(0, 0) *= SCALE_XI_TRANS;
 				AH.block<3, 8>(3, 0) *= SCALE_XI_ROT;
 				AH.block<1, 8>(6, 0) *= SCALE_A;
@@ -83,6 +86,7 @@ namespace dso
 				AT.block<1, 8>(6, 0) *= SCALE_A;
 				AT.block<1, 8>(7, 0) *= SCALE_B;
 
+				// 求解t行h列的帧的位姿参数以及光度参数的伴随
 				adHost[h + t * nFrames] = AH;
 				adTarget[h + t * nFrames] = AT;
 			}
@@ -265,7 +269,7 @@ namespace dso
 			h->data->step.tail<2>().setZero();
 
 			for (EFFrame* t : frames)
-				xAd[nFrames*h->idx + t->idx] = xF.segment<8>(CPARS + 8 * h->idx).transpose() *   adHostF[h->idx + nFrames * t->idx]
+				xAd[nFrames*h->idx + t->idx] = xF.segment<8>(CPARS + 8 * h->idx).transpose() *  adHostF[h->idx + nFrames * t->idx]
 				+ xF.segment<8>(CPARS + 8 * t->idx).transpose() * adTargetF[h->idx + nFrames * t->idx];
 		}
 
