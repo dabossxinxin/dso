@@ -755,9 +755,16 @@ namespace dso
 		VecX  bL_top, bA_top, bM_top, b_sc;
 
 		// 这里的MT代表多线程
+		// accumulatorAF统计了所有active点的hessians
+		// accumulatorLF统计了所有linearized点的hessians
+		// accumulatorSCF统计的Hessians矩阵为舒尔补hessians:Hrm*hmm^-1*Hmr^T
 		accumulateAF_MT(HA_top, bA_top, multiThreading);
 		accumulateLF_MT(HL_top, bL_top, multiThreading);
 		accumulateSCF_MT(H_sc, b_sc, multiThreading);
+
+		// 上一次边缘化后状态量优化后发生了改变因此矩阵bm自然应该随之变化
+		// 若不变则可能由于线性化误差过大导致系统崩溃产生
+		// bm更新方法为将bm按照当前FEJ线性化点重新泰勒展开得到bm"=bm+Hm*deltaX
 		bM_top = (bM + HM * getStitchedDeltaF());
 
 		MatXX HFinal_top;
@@ -785,6 +792,7 @@ namespace dso
 		}
 		else
 		{
+			// active、linearized点的Hessians与上一次边缘化信息矩阵之间的和
 			HFinal_top = HL_top + HM + HA_top;
 			bFinal_top = bL_top + bM_top + bA_top - b_sc;
 

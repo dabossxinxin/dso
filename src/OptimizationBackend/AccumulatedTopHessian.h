@@ -116,6 +116,7 @@ namespace dso
 			}
 			else
 			{
+				// 前面已经计算了所有残差构造的Hessians矩阵的子模块，现在把这些子模块都放进统一的H和b矩阵中
 				H = MatXX::Zero(nframes[0] * 8 + CPARS, nframes[0] * 8 + CPARS);
 				b = VecX::Zero(nframes[0] * 8 + CPARS);
 				stitchDoubleInternal(&H, &b, EF, usePrior, 0, nframes[0] * nframes[0], 0, -1);

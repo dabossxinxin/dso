@@ -110,6 +110,7 @@ namespace dso
 
 		float bdSumF;
 		float HdiF;
+
 		float Hdd_accLF;
 		VecCf Hcd_accLF;
 		float bd_accLF;
@@ -132,7 +133,7 @@ namespace dso
 
 		Vec8 prior;				// prior hessian (diagonal)
 		Vec8 delta_prior;		// = state-state_prior (E_prior = (delta_prior)' * diag(prior) * (delta_prior)
-		Vec8 delta;				// state - state_zero.
+		Vec8 delta;				// state - state_zero.优化后的状态量与FEJ状态量之间的差
 
 		std::vector<EFPoint*> points;
 		FrameHessian* data;

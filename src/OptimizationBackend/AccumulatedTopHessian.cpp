@@ -20,8 +20,6 @@
 * You should have received a copy of the GNU General Public License
 * along with DSO. If not, see <http://www.gnu.org/licenses/>.
 */
-
-
 #include "OptimizationBackend/AccumulatedTopHessian.h"
 #include "OptimizationBackend/EnergyFunctional.h"
 #include "OptimizationBackend/EnergyFunctionalStructs.h"
@@ -48,6 +46,7 @@ namespace dso
 		float Hdd_acc = 0;
 		VecCf  Hcd_acc = VecCf::Zero();
 
+		// 遍历所有的残差，计算残差构造出来的Hessian矩阵
 		for (EFResidual* r : p->residualsAll)
 		{
 			if (mode == 0)
@@ -82,9 +81,11 @@ namespace dso
 				__m128 delta_a = _mm_set1_ps((float)(dp[6]));
 				__m128 delta_b = _mm_set1_ps((float)(dp[7]));
 
+				// 计算优化变量变化时res的值
+				// PATTERN: rtz = resF - [JI*Jp Ja]*delta.
 				for (int i = 0; i < patternNum; i += 4)
 				{
-					// PATTERN: rtz = resF - [JI*Jp Ja]*delta.
+					// rtz:residual to zero
 					__m128 rtz = _mm_load_ps(((float*)&r->res_toZeroF) + i);
 					rtz = _mm_add_ps(rtz, _mm_mul_ps(_mm_load_ps(((float*)(rJ->JIdx)) + i), Jp_delta_x));
 					rtz = _mm_add_ps(rtz, _mm_mul_ps(_mm_load_ps(((float*)(rJ->JIdx + 1)) + i), Jp_delta_y));
@@ -136,6 +137,9 @@ namespace dso
 				rJ->JabJIdx(1, 0), rJ->JabJIdx(1, 1),
 				JI_r[0], JI_r[1]);
 
+			// Hdd(1x1)表示光度残差关于逆深度的雅可比的平方
+			// Hcd(4x1)表示光度残差关于相机内参以及光度残差关于关键点逆深度雅可比的乘积
+			// bd(1x1)表示光度残差关于逆深度的雅可比与光度残差的乘积
 			Vec2f Ji2_Jpdd = rJ->JIdx2 * rJ->Jpdd;
 			bd_acc += JI_r[0] * rJ->Jpdd[0] + JI_r[1] * rJ->Jpdd[1];
 			Hdd_acc += Ji2_Jpdd.dot(rJ->Jpdd);
@@ -144,6 +148,9 @@ namespace dso
 			nres[tid]++;
 		}
 
+		// mode == 0:active point
+		// mode == 1:linearized point
+		// mode == 2:marginalized point
 		if (mode == 0)
 		{
 			p->Hdd_accAF = Hdd_acc;
@@ -168,8 +175,10 @@ namespace dso
 	template void AccumulatedTopHessianSSE::addPoint<1>(EFPoint* p, EnergyFunctional const * const ef, int tid);
 	template void AccumulatedTopHessianSSE::addPoint<2>(EFPoint* p, EnergyFunctional const * const ef, int tid);
 
+	// 给出计算得到的Hessians以及b矩阵
 	void AccumulatedTopHessianSSE::stitchDouble(MatXX &H, VecX &b, EnergyFunctional const * const EF, bool usePrior, bool useDelta, int tid)
 	{
+		// 初始化滑窗中的所有关键帧构成的Hessian和b矩阵
 		H = MatXX::Zero(nframes[tid] * 8 + CPARS, nframes[tid] * 8 + CPARS);
 		b = VecX::Zero(nframes[tid] * 8 + CPARS);
 
@@ -186,13 +195,14 @@ namespace dso
 
 				MatPCPC accH = acc[tid][aidx].H.cast<double>();
 
-				// 光度残差相对于h-t之间的位姿变换的Jacobian转换光度残差相对于host位姿的Jacobian以及光度残差相对于target的Jacobian
+				// 光度残差相对两帧之间相对位姿转换为相对于每一帧位姿状态
+				// 这种从相对状态转换为绝对状态的变换使用伴随矩阵实现
 				H.block<8, 8>(hIdx, hIdx).noalias() += EF->adHost[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adHost[aidx].transpose();
 				H.block<8, 8>(tIdx, tIdx).noalias() += EF->adTarget[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adTarget[aidx].transpose();
 				H.block<8, 8>(hIdx, tIdx).noalias() += EF->adHost[aidx] * accH.block<8, 8>(CPARS, CPARS) * EF->adTarget[aidx].transpose();
 				H.block<8, CPARS>(hIdx, 0).noalias() += EF->adHost[aidx] * accH.block<8, CPARS>(CPARS, 0);
 				H.block<8, CPARS>(tIdx, 0).noalias() += EF->adTarget[aidx] * accH.block<8, CPARS>(CPARS, 0);
-				H.topLeftCorner<CPARS, CPARS>().noalias() += accH.block<CPARS, CPARS>(0, 0);
+				H.topLeftCorner<CPARS, CPARS>().noalias() += accH.block<CPARS, CPARS>(0, 0);	// 关于相机内参数的Hessian矩阵
 
 				b.segment<8>(hIdx).noalias() += EF->adHost[aidx] * accH.block<8, 1>(CPARS, 8 + CPARS);
 				b.segment<8>(tIdx).noalias() += EF->adTarget[aidx] * accH.block<8, 1>(CPARS, 8 + CPARS);
@@ -216,6 +226,10 @@ namespace dso
 			}
 		}
 
+		// 添加先验信息
+		// 添加先验信息时需要重新对Hessian与b矩阵进行调整
+		// 但随着观测越来越多，优化变量产生变化，为避免一阶泰勒展开误差大导致的系统崩溃
+		// b矩阵需要根据优化变量的变化量进行调整
 		if (usePrior)
 		{
 			assert(useDelta);
@@ -234,13 +248,13 @@ namespace dso
 		int min, int max, Vec10* stats, int tid)
 	{
 		int toAggregate = NUM_THREADS;
-		if (tid == -1) { toAggregate = 1; tid = 0; }	// special case: if we dont do multithreading, dont aggregate.
+		if (tid == -1) { toAggregate = 1; tid = 0; }	// 只有在多线程时才会用参数toAggregate
 		if (min == max) return;
 
 		for (int k = min; k < max; k++)
 		{
-			int h = k % nframes[0];
-			int t = k / nframes[0];
+			int h = k % nframes[0]; // 列
+			int t = k / nframes[0];	// 行
 
 			int hIdx = CPARS + h * 8;
 			int tIdx = CPARS + t * 8;
